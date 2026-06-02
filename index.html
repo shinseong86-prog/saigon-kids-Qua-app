@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Saigon kids&qua · 회원 관리</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:#0a1929;
+    --bg-soft:#0f2438;
+    --panel:#13314b;
+    --panel-2:#17395a;
+    --line:rgba(255,255,255,.08);
+    --line-strong:rgba(255,255,255,.15);
+    --ink:#eaf4ff;
+    --ink-dim:#9fc0dd;
+    --ink-faint:#6f93b3;
+    --aqua:#36d6c3;
+    --aqua-deep:#1fa89a;
+    --wave:#46a8ff;
+    --coral:#ff7a6b;
+    --gold:#ffc861;
+    --danger:#ff5c5c;
+    --radius:16px;
+    --shadow:0 18px 40px -20px rgba(0,0,0,.7);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Be Vietnam Pro',system-ui,sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(70,168,255,.18), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(54,214,195,.14), transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ===== Layout ===== */
+  .app{display:flex;min-height:100vh}
+  .sidebar{
+    width:248px;flex-shrink:0;
+    background:linear-gradient(180deg,var(--bg-soft),rgba(15,36,56,.4));
+    border-right:1px solid var(--line);
+    padding:26px 18px;
+    position:sticky;top:0;height:100vh;
+    display:flex;flex-direction:column;
+  }
+  .brand{display:flex;align-items:center;gap:12px;padding:0 6px 24px}
+  .brand .logo{
+    width:42px;height:42px;border-radius:13px;flex-shrink:0;
+    background:linear-gradient(135deg,var(--aqua),var(--wave));
+    display:grid;place-items:center;font-size:22px;
+    box-shadow:0 8px 20px -6px rgba(54,214,195,.6);
+  }
+  .brand h1{font-family:'Fraunces',serif;font-size:18px;font-weight:600;line-height:1.1}
+  .brand span{font-size:11px;color:var(--ink-faint);letter-spacing:.5px}
+
+  .nav{display:flex;flex-direction:column;gap:4px;flex:1}
+  .nav button{
+    display:flex;align-items:center;gap:12px;
+    background:none;border:none;color:var(--ink-dim);
+    font-family:inherit;font-size:14px;font-weight:500;
+    padding:11px 14px;border-radius:11px;cursor:pointer;
+    text-align:left;transition:.18s;width:100%;
+  }
+  .nav button .ico{font-size:17px;width:20px;text-align:center}
+  .nav button:hover{background:rgba(255,255,255,.05);color:var(--ink)}
+  .nav button.active{
+    background:linear-gradient(135deg,rgba(54,214,195,.22),rgba(70,168,255,.16));
+    color:#fff;box-shadow:inset 0 0 0 1px var(--line-strong);
+  }
+  .sidebar-foot{font-size:11px;color:var(--ink-faint);padding:14px 8px 0;border-top:1px solid var(--line);line-height:1.5}
+
+  .main{flex:1;padding:32px 38px 64px;max-width:1180px}
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:26px;flex-wrap:wrap}
+  .page-head h2{font-family:'Fraunces',serif;font-size:30px;font-weight:600;letter-spacing:-.5px}
+  .page-head p{color:var(--ink-faint);font-size:13px;margin-top:4px}
+
+  /* ===== Buttons ===== */
+  .btn{
+    font-family:inherit;font-weight:600;font-size:13px;
+    border:none;border-radius:10px;padding:10px 18px;cursor:pointer;
+    transition:.18s;display:inline-flex;align-items:center;gap:7px;
+  }
+  .btn-primary{background:linear-gradient(135deg,var(--aqua),var(--aqua-deep));color:#06231f}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 10px 22px -10px var(--aqua)}
+  .btn-ghost{background:rgba(255,255,255,.06);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+  .btn-ghost:hover{background:rgba(255,255,255,.1)}
+  .btn-sm{padding:6px 12px;font-size:12px;border-radius:8px}
+  .btn-danger{background:rgba(255,92,92,.14);color:var(--danger);box-shadow:inset 0 0 0 1px rgba(255,92,92,.3)}
+  .btn-danger:hover{background:rgba(255,92,92,.24)}
+
+  /* ===== Cards / stats ===== */
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:28px}
+  .stat{
+    background:linear-gradient(160deg,var(--panel),var(--bg-soft));
+    border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;box-shadow:var(--shadow);position:relative;overflow:hidden;
+  }
+  .stat::after{content:"";position:absolute;right:-30px;top:-30px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,rgba(70,168,255,.25),transparent 70%)}
+  .stat .label{font-size:12px;color:var(--ink-faint);font-weight:500;display:flex;align-items:center;gap:6px}
+  .stat .value{font-family:'Fraunces',serif;font-size:30px;font-weight:600;margin-top:8px}
+  .stat .sub{font-size:12px;color:var(--ink-dim);margin-top:4px}
+
+  .panel{
+    background:linear-gradient(160deg,var(--panel),var(--bg-soft));
+    border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);overflow:hidden;
+  }
+  .panel-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
+  .panel-head h3{font-size:15px;font-weight:600}
+  .panel-body{padding:6px 0}
+
+  /* ===== Table ===== */
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  thead th{
+    text-align:left;font-size:11px;font-weight:600;letter-spacing:.6px;
+    text-transform:uppercase;color:var(--ink-faint);
+    padding:12px 22px;border-bottom:1px solid var(--line);
+  }
+  tbody td{padding:14px 22px;border-bottom:1px solid var(--line)}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:rgba(255,255,255,.03)}
+  .name-cell{display:flex;align-items:center;gap:11px}
+  .avatar{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:700;font-size:13px;color:#06231f;flex-shrink:0}
+  .muted{color:var(--ink-faint);font-size:12.5px}
+
+  .tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px}
+  .tag-kid{background:rgba(255,200,97,.16);color:var(--gold)}
+  .tag-adult{background:rgba(159,192,221,.14);color:var(--ink-dim)}
+  .tag-active{background:rgba(54,214,195,.16);color:var(--aqua)}
+  .tag-low{background:rgba(255,122,107,.16);color:var(--coral)}
+  .tag-expired{background:rgba(255,92,92,.16);color:var(--danger)}
+
+  .empty{padding:48px 22px;text-align:center;color:var(--ink-faint)}
+  .empty .big{font-size:34px;margin-bottom:10px;opacity:.6}
+
+  /* ===== Modal ===== */
+  .overlay{position:fixed;inset:0;background:rgba(4,12,22,.7);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .overlay.show{display:flex}
+  .modal{
+    width:100%;max-width:460px;background:var(--panel-2);
+    border:1px solid var(--line-strong);border-radius:18px;
+    box-shadow:0 30px 70px -20px rgba(0,0,0,.8);overflow:hidden;
+    animation:pop .22s ease;
+  }
+  @keyframes pop{from{transform:scale(.95) translateY(8px);opacity:0}to{transform:none;opacity:1}}
+  .modal-head{padding:20px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  .modal-head h3{font-family:'Fraunces',serif;font-size:19px;font-weight:600}
+  .modal-head .x{background:none;border:none;color:var(--ink-faint);font-size:22px;cursor:pointer;line-height:1}
+  .modal-body{padding:22px 24px;max-height:65vh;overflow:auto}
+  .modal-foot{padding:16px 24px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px}
+
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-dim);margin-bottom:7px}
+  .field input,.field select{
+    width:100%;background:var(--bg-soft);border:1px solid var(--line-strong);
+    color:var(--ink);font-family:inherit;font-size:14px;
+    padding:11px 13px;border-radius:10px;outline:none;transition:.16s;
+  }
+  .field input:focus,.field select:focus{border-color:var(--aqua);box-shadow:0 0 0 3px rgba(54,214,195,.15)}
+  .field-row{display:flex;gap:12px}
+  .field-row .field{flex:1}
+  .check{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13.5px;color:var(--ink)}
+  .check input{width:auto}
+
+  .searchbar{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+  .searchbar input,.searchbar select{
+    background:var(--bg-soft);border:1px solid var(--line);color:var(--ink);
+    font-family:inherit;font-size:13.5px;padding:9px 13px;border-radius:10px;outline:none;
+  }
+  .searchbar input{flex:1;min-width:180px}
+  .searchbar input:focus,.searchbar select:focus{border-color:var(--aqua)}
+
+  .bday-list{display:grid;gap:12px}
+  .bday{display:flex;align-items:center;gap:14px;padding:16px 20px;background:linear-gradient(160deg,var(--panel),var(--bg-soft));border:1px solid var(--line);border-radius:14px}
+  .bday.soon{box-shadow:inset 0 0 0 1px rgba(255,200,97,.3)}
+  .bday .cake{font-size:24px}
+  .bday .when{margin-left:auto;text-align:right}
+  .bday .when .d{font-weight:700;color:var(--gold)}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--aqua);color:#06231f;font-weight:600;font-size:13px;padding:12px 22px;border-radius:12px;opacity:0;transition:.3s;z-index:90;box-shadow:0 14px 30px -10px rgba(54,214,195,.7)}
+  .toast.show{opacity:1;transform:translateX(-50%)}
+
+  @media(max-width:860px){
+    .app{flex-direction:column}
+    .sidebar{width:100%;height:auto;position:static;flex-direction:row;align-items:center;flex-wrap:wrap;padding:14px}
+    .brand{padding:0 12px 0 4px}
+    .nav{flex-direction:row;flex-wrap:wrap;gap:4px}
+    .nav button{padding:8px 12px}
+    .nav button span.txt{display:none}
+    .nav button .ico{font-size:19px}
+    .sidebar-foot{display:none}
+    .main{padding:22px 18px 60px}
+    .page-head h2{font-size:24px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">🐬</div>
+      <div>
+        <h1>Saigon kids&qua</h1>
+        <span>회원 관리 시스템</span>
+      </div>
+    </div>
+    <nav class="nav" id="nav">
+      <button data-page="dashboard" class="active"><span class="ico">📊</span><span class="txt">대시보드</span></button>
+      <button data-page="members"><span class="ico">🧑‍🤝‍🧑</span><span class="txt">회원 관리</span></button>
+      <button data-page="attendance"><span class="ico">✅</span><span class="txt">출석</span></button>
+      <button data-page="passes"><span class="ico">🎫</span><span class="txt">회원권 관리</span></button>
+      <button data-page="payments"><span class="ico">💳</span><span class="txt">결제 내역</span></button>
+      <button data-page="birthdays"><span class="ico">🎂</span><span class="txt">생일</span></button>
+    </nav>
+    <div class="sidebar-foot">
+      데이터는 이 브라우저에 저장됩니다 (localStorage).<br>
+      <span id="lastSaved"></span>
+    </div>
+  </aside>
+
+  <main class="main" id="main"></main>
+</div>
+
+<!-- Member modal -->
+<div class="overlay" id="memberModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="memberModalTitle">회원 추가</h3>
+      <button class="x" onclick="closeModal('memberModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="m_id">
+      <div class="field">
+        <label>이름 (Họ và tên)</label>
+        <input id="m_name" placeholder="예: Nguyễn Minh Anh">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>전화번호</label>
+          <input id="m_phone" placeholder="0901 234 567">
+        </div>
+        <div class="field">
+          <label>생일</label>
+          <input id="m_birth" type="date">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>회원권</label>
+          <select id="m_tier"></select>
+        </div>
+        <div class="field">
+          <label>등록일</label>
+          <input id="m_join" type="date">
+        </div>
+      </div>
+      <div class="field">
+        <label class="check"><input type="checkbox" id="m_kid"> 어린이 회원 (Trẻ em)</label>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('memberModal')">취소</button>
+      <button class="btn btn-primary" onclick="saveMember()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pass/tier modal -->
+<div class="overlay" id="tierModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="tierModalTitle">회원권 추가</h3>
+      <button class="x" onclick="closeModal('tierModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="t_id">
+      <div class="field">
+        <label>회원권 이름</label>
+        <input id="t_name" placeholder="예: 주 2회반">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>주당 횟수</label>
+          <input id="t_perweek" type="number" min="1" placeholder="2">
+        </div>
+        <div class="field">
+          <label>월 가격 (VND)</label>
+          <input id="t_price" type="number" min="0" placeholder="1500000">
+        </div>
+      </div>
+      <div class="field">
+        <label>총 세션 수 (선택)</label>
+        <input id="t_sessions" type="number" min="0" placeholder="예: 8">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('tierModal')">취소</button>
+      <button class="btn btn-primary" onclick="saveTier()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payment modal -->
+<div class="overlay" id="payModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>결제 등록</h3>
+      <button class="x" onclick="closeModal('payModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>회원</label>
+        <select id="p_member"></select>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>금액 (VND)</label>
+          <input id="p_amount" type="number" min="0" placeholder="1500000">
+        </div>
+        <div class="field">
+          <label>날짜</label>
+          <input id="p_date" type="date">
+        </div>
+      </div>
+      <div class="field">
+        <label>메모</label>
+        <input id="p_memo" placeholder="예: 4월 회원권 결제">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('payModal')">취소</button>
+      <button class="btn btn-primary" onclick="savePayment()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= Storage ================= */
+const KEY = 'saigon_kidsqua_v1';
+const todayISO = () => new Date().toISOString().slice(0,10);
+
+function seed(){
+  return {
+    members:[
+      {id:id(),name:'Nguyễn Minh Anh',phone:'0901 234 567',birth:'2017-04-12',tierId:null,join:'2025-01-08',kid:true},
+      {id:id(),name:'Trần Gia Bảo',phone:'0912 888 221',birth:'2016-11-30',tierId:null,join:'2025-02-15',kid:true},
+      {id:id(),name:'Lê Thu Hà',phone:'0987 654 321',birth:'1990-06-03',tierId:null,join:'2024-12-01',kid:false},
+      {id:id(),name:'Phạm Quốc Huy',phone:'0933 121 212',birth:'2018-09-21',tierId:null,join:'2025-03-02',kid:true},
+    ],
+    tiers:[
+      {id:id(),name:'주 1회반',perWeek:1,price:900000,sessions:4},
+      {id:id(),name:'주 2회반',perWeek:2,price:1500000,sessions:8},
+      {id:id(),name:'주 3회반',perWeek:3,price:2000000,sessions:12},
+    ],
+    attendance:[], // {id, memberId, date}
+    payments:[],   // {id, memberId, amount, date, memo}
+  };
+}
+function id(){return Math.random().toString(36).slice(2,9)}
+
+let DB = load();
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  const s = seed();
+  // assign default tiers to seed members
+  s.members[0].tierId=s.tiers[1].id;
+  s.members[1].tierId=s.tiers[0].id;
+  s.members[2].tierId=s.tiers[2].id;
+  s.members[3].tierId=s.tiers[1].id;
+  return s;
+}
+function save(){
+  localStorage.setItem(KEY, JSON.stringify(DB));
+  const el=document.getElementById('lastSaved');
+  if(el) el.textContent='마지막 저장: '+new Date().toLocaleTimeString('ko-KR');
+}
+
+/* ================= Helpers ================= */
+const vnd = n => (Number(n)||0).toLocaleString('vi-VN')+' ₫';
+const tierName = tid => (DB.tiers.find(t=>t.id===tid)||{}).name || '미지정';
+const tierOf = tid => DB.tiers.find(t=>t.id===tid);
+const memberName = mid => (DB.members.find(m=>m.id===mid)||{}).name || '(삭제됨)';
+const avatarColor = name => {
+  const colors=['#36d6c3','#46a8ff','#ffc861','#ff7a6b','#a78bff','#5fd17a'];
+  let h=0;for(const c of name)h=(h*31+c.charCodeAt(0))>>>0;
+  return colors[h%colors.length];
+};
+const initials = name => {
+  const p=name.trim().split(/\s+/);
+  return (p.length>1?p[p.length-2][0]+p[p.length-1][0]:name.slice(0,2)).toUpperCase();
+};
+
+function sessionsUsed(memberId){
+  const m=DB.members.find(x=>x.id===memberId); if(!m)return 0;
+  return DB.attendance.filter(a=>a.memberId===memberId && a.date>=m.join).length;
+}
+function passStatus(m){
+  const t=tierOf(m.tierId);
+  if(!t || !t.sessions) return {label:'활성',cls:'tag-active',used:sessionsUsed(m.id),total:null};
+  const used=sessionsUsed(m.id);
+  const left=t.sessions-used;
+  if(left<=0) return {label:'소진',cls:'tag-expired',used,total:t.sessions};
+  if(left<=2) return {label:'잔여 '+left+'회',cls:'tag-low',used,total:t.sessions};
+  return {label:'잔여 '+left+'회',cls:'tag-active',used,total:t.sessions};
+}
+
+function daysUntilBirthday(birth){
+  if(!birth) return null;
+  const now=new Date(); now.setHours(0,0,0,0);
+  const b=new Date(birth);
+  let next=new Date(now.getFullYear(),b.getMonth(),b.getDate());
+  if(next<now) next.setFullYear(now.getFullYear()+1);
+  return Math.round((next-now)/86400000);
+}
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove('show'),1800);
+}
+
+/* ================= Router ================= */
+const nav=document.getElementById('nav');
+const main=document.getElementById('main');
+let page='dashboard';
+nav.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  page=b.dataset.page;
+  [...nav.children].forEach(x=>x.classList.toggle('active',x===b));
+  render();
+});
+function render(){
+  ({dashboard:renderDashboard,members:renderMembers,attendance:renderAttendance,
+    passes:renderPasses,payments:renderPayments,birthdays:renderBirthdays})[page]();
+}
+
+/* ================= Dashboard ================= */
+function renderDashboard(){
+  const total=DB.members.length;
+  const kids=DB.members.filter(m=>m.kid).length;
+  const month=todayISO().slice(0,7);
+  const monthRevenue=DB.payments.filter(p=>p.date.slice(0,7)===month).reduce((s,p)=>s+Number(p.amount),0);
+  const todayAtt=DB.attendance.filter(a=>a.date===todayISO()).length;
+  const lowPasses=DB.members.filter(m=>{const s=passStatus(m);return s.cls==='tag-low'||s.cls==='tag-expired'}).length;
+  const soonBday=DB.members.filter(m=>{const d=daysUntilBirthday(m.birth);return d!==null&&d<=14}).length;
+
+  main.innerHTML=`
+    <div class="page-head">
+      <div><h2>대시보드</h2><p>오늘 ${new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</p></div>
+      <button class="btn btn-primary" onclick="openMember()">+ 회원 추가</button>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="label">🧑‍🤝‍🧑 전체 회원</div><div class="value">${total}</div><div class="sub">어린이 ${kids}명 · 성인 ${total-kids}명</div></div>
+      <div class="stat"><div class="label">💰 이번 달 매출</div><div class="value" style="font-size:24px">${vnd(monthRevenue)}</div><div class="sub">${DB.payments.filter(p=>p.date.slice(0,7)===month).length}건 결제</div></div>
+      <div class="stat"><div class="label">✅ 오늘 출석</div><div class="value">${todayAtt}</div><div class="sub">명 출석 체크됨</div></div>
+      <div class="stat"><div class="label">🎫 회원권 소진 임박</div><div class="value">${lowPasses}</div><div class="sub">잔여 2회 이하 / 소진</div></div>
+      <div class="stat"><div class="label">🎂 다가오는 생일</div><div class="value">${soonBday}</div><div class="sub">2주 이내</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>회원권 소진 임박 · 만료</h3></div>
+      <div class="panel-body">${dashAlerts()}</div>
+    </div>`;
+}
+function dashAlerts(){
+  const rows=DB.members.map(m=>({m,s:passStatus(m)})).filter(x=>x.s.cls==='tag-low'||x.s.cls==='tag-expired');
+  if(!rows.length) return `<div class="empty"><div class="big">🌊</div>모든 회원권이 여유 있습니다.</div>`;
+  return `<table><thead><tr><th>회원</th><th>회원권</th><th>사용 / 전체</th><th>상태</th></tr></thead><tbody>${
+    rows.map(({m,s})=>`<tr>
+      <td><div class="name-cell"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}</div></td>
+      <td>${tierName(m.tierId)}</td>
+      <td>${s.total?`${s.used} / ${s.total}회`:'-'}</td>
+      <td><span class="tag ${s.cls}">${s.label}</span></td>
+    </tr>`).join('')
+  }</tbody></table>`;
+}
+
+/* ================= Members ================= */
+let memberSearch='',memberFilter='all';
+function renderMembers(){
+  main.innerHTML=`
+    <div class="page-head">
+      <div><h2>회원 관리</h2><p>전체 ${DB.members.length}명</p></div>
+      <button class="btn btn-primary" onclick="openMember()">+ 회원 추가</button>
+    </div>
+    <div class="searchbar">
+      <input id="msearch" placeholder="이름·전화번호 검색…" value="${memberSearch}">
+      <select id="mfilter">
+        <option value="all">전체</option>
+        <option value="kid">어린이</option>
+        <option value="adult">성인</option>
+      </select>
+    </div>
+    <div class="panel"><div class="panel-body" id="memberTable"></div></div>`;
+  document.getElementById('msearch').addEventListener('input',e=>{memberSearch=e.target.value;drawMembers()});
+  const f=document.getElementById('mfilter');f.value=memberFilter;
+  f.addEventListener('change',e=>{memberFilter=e.target.value;drawMembers()});
+  drawMembers();
+}
+function drawMembers(){
+  let list=DB.members.filter(m=>{
+    const q=memberSearch.toLowerCase();
+    const okQ=!q||m.name.toLowerCase().includes(q)||(m.phone||'').includes(q);
+    const okF=memberFilter==='all'||(memberFilter==='kid'&&m.kid)||(memberFilter==='adult'&&!m.kid);
+    return okQ&&okF;
+  });
+  const el=document.getElementById('memberTable');
+  if(!list.length){el.innerHTML=`<div class="empty"><div class="big">🔍</div>해당하는 회원이 없습니다.</div>`;return}
+  el.innerHTML=`<table><thead><tr><th>회원</th><th>구분</th><th>회원권</th><th>전화</th><th>등록일</th><th></th></tr></thead><tbody>${
+    list.map(m=>{const s=passStatus(m);return `<tr>
+      <td><div class="name-cell"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}</div></td>
+      <td><span class="tag ${m.kid?'tag-kid':'tag-adult'}">${m.kid?'어린이':'성인'}</span></td>
+      <td>${tierName(m.tierId)} <span class="tag ${s.cls}" style="margin-left:4px">${s.label}</span></td>
+      <td class="muted">${m.phone||'-'}</td>
+      <td class="muted">${m.join||'-'}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="openMember('${m.id}')">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="delMember('${m.id}')">삭제</button>
+      </td>
+    </tr>`}).join('')
+  }</tbody></table>`;
+}
+function openMember(mid){
+  const tierSel=document.getElementById('m_tier');
+  tierSel.innerHTML='<option value="">미지정</option>'+DB.tiers.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  const m=mid?DB.members.find(x=>x.id===mid):null;
+  document.getElementById('memberModalTitle').textContent=m?'회원 수정':'회원 추가';
+  document.getElementById('m_id').value=m?m.id:'';
+  document.getElementById('m_name').value=m?m.name:'';
+  document.getElementById('m_phone').value=m?m.phone||'':'';
+  document.getElementById('m_birth').value=m?m.birth||'':'';
+  document.getElementById('m_tier').value=m?m.tierId||'':'';
+  document.getElementById('m_join').value=m?m.join||todayISO():todayISO();
+  document.getElementById('m_kid').checked=m?!!m.kid:true;
+  showModal('memberModal');
+}
+function saveMember(){
+  const name=document.getElementById('m_name').value.trim();
+  if(!name){toast('이름을 입력하세요');return}
+  const data={
+    name,
+    phone:document.getElementById('m_phone').value.trim(),
+    birth:document.getElementById('m_birth').value,
+    tierId:document.getElementById('m_tier').value||null,
+    join:document.getElementById('m_join').value||todayISO(),
+    kid:document.getElementById('m_kid').checked,
+  };
+  const eid=document.getElementById('m_id').value;
+  if(eid){Object.assign(DB.members.find(m=>m.id===eid),data)}
+  else{DB.members.push({id:id(),...data})}
+  save();closeModal('memberModal');render();toast('저장되었습니다');
+}
+function delMember(mid){
+  if(!confirm('이 회원을 삭제할까요? 출석·결제 기록도 함께 삭제됩니다.'))return;
+  DB.members=DB.members.filter(m=>m.id!==mid);
+  DB.attendance=DB.attendance.filter(a=>a.memberId!==mid);
+  DB.payments=DB.payments.filter(p=>p.memberId!==mid);
+  save();render();toast('삭제되었습니다');
+}
+
+/* ================= Attendance ================= */
+let attDate=todayISO();
+function renderAttendance(){
+  main.innerHTML=`
+    <div class="page-head">
+      <div><h2>출석</h2><p>날짜별 출석 체크</p></div>
+      <input type="date" id="attDate" value="${attDate}" style="background:var(--bg-soft);border:1px solid var(--line-strong);color:var(--ink);padding:9px 13px;border-radius:10px;font-family:inherit">
+    </div>
+    <div class="panel"><div class="panel-body" id="attTable"></div></div>`;
+  document.getElementById('attDate').addEventListener('change',e=>{attDate=e.target.value;drawAttendance()});
+  drawAttendance();
+}
+function drawAttendance(){
+  const el=document.getElementById('attTable');
+  if(!DB.members.length){el.innerHTML=`<div class="empty"><div class="big">🧑‍🤝‍🧑</div>먼저 회원을 등록하세요.</div>`;return}
+  el.innerHTML=`<table><thead><tr><th>회원</th><th>회원권</th><th>잔여</th><th style="text-align:right">출석</th></tr></thead><tbody>${
+    DB.members.map(m=>{
+      const present=DB.attendance.some(a=>a.memberId===m.id&&a.date===attDate);
+      const s=passStatus(m);
+      return `<tr>
+        <td><div class="name-cell"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}</div></td>
+        <td class="muted">${tierName(m.tierId)}</td>
+        <td><span class="tag ${s.cls}">${s.label}</span></td>
+        <td style="text-align:right">
+          <button class="btn ${present?'btn-primary':'btn-ghost'} btn-sm" onclick="toggleAtt('${m.id}')">${present?'✓ 출석함':'출석 체크'}</button>
+        </td>
+      </tr>`}).join('')
+  }</tbody></table>`;
+}
+function toggleAtt(mid){
+  const i=DB.attendance.findIndex(a=>a.memberId===mid&&a.date===attDate);
+  if(i>=0)DB.attendance.splice(i,1);
+  else DB.attendance.push({id:id(),memberId:mid,date:attDate});
+  save();drawAttendance();
+}
+
+/* ================= Passes / tiers ================= */
+function renderPasses(){
+  main.innerHTML=`
+    <div class="page-head">
+      <div><h2>회원권 관리</h2><p>주당 횟수별 요금제</p></div>
+      <button class="btn btn-primary" onclick="openTier()">+ 회원권 추가</button>
+    </div>
+    <div class="panel"><div class="panel-body" id="tierTable"></div></div>`;
+  drawTiers();
+}
+function drawTiers(){
+  const el=document.getElementById('tierTable');
+  if(!DB.tiers.length){el.innerHTML=`<div class="empty"><div class="big">🎫</div>등록된 회원권이 없습니다.</div>`;return}
+  el.innerHTML=`<table><thead><tr><th>회원권</th><th>주당 횟수</th><th>월 가격</th><th>세션 수</th><th>가입 회원</th><th></th></tr></thead><tbody>${
+    DB.tiers.map(t=>{const cnt=DB.members.filter(m=>m.tierId===t.id).length;return `<tr>
+      <td><strong>${t.name}</strong></td>
+      <td>주 ${t.perWeek}회</td>
+      <td>${vnd(t.price)}</td>
+      <td class="muted">${t.sessions?t.sessions+'회':'-'}</td>
+      <td class="muted">${cnt}명</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="openTier('${t.id}')">수정</button>
+        <button class="btn btn-danger btn-sm" onclick="delTier('${t.id}')">삭제</button>
+      </td>
+    </tr>`}).join('')
+  }</tbody></table>`;
+}
+function openTier(tid){
+  const t=tid?DB.tiers.find(x=>x.id===tid):null;
+  document.getElementById('tierModalTitle').textContent=t?'회원권 수정':'회원권 추가';
+  document.getElementById('t_id').value=t?t.id:'';
+  document.getElementById('t_name').value=t?t.name:'';
+  document.getElementById('t_perweek').value=t?t.perWeek:'';
+  document.getElementById('t_price').value=t?t.price:'';
+  document.getElementById('t_sessions').value=t?t.sessions||'':'';
+  showModal('tierModal');
+}
+function saveTier(){
+  const name=document.getElementById('t_name').value.trim();
+  if(!name){toast('회원권 이름을 입력하세요');return}
+  const data={
+    name,
+    perWeek:Number(document.getElementById('t_perweek').value)||1,
+    price:Number(document.getElementById('t_price').value)||0,
+    sessions:Number(document.getElementById('t_sessions').value)||0,
+  };
+  const eid=document.getElementById('t_id').value;
+  if(eid)Object.assign(DB.tiers.find(t=>t.id===eid),data);
+  else DB.tiers.push({id:id(),...data});
+  save();closeModal('tierModal');render();toast('저장되었습니다');
+}
+function delTier(tid){
+  if(!confirm('이 회원권을 삭제할까요? 가입 회원은 미지정으로 바뀝니다.'))return;
+  DB.tiers=DB.tiers.filter(t=>t.id!==tid);
+  DB.members.forEach(m=>{if(m.tierId===tid)m.tierId=null});
+  save();render();toast('삭제되었습니다');
+}
+
+/* ================= Payments ================= */
+function renderPayments(){
+  const total=DB.payments.reduce((s,p)=>s+Number(p.amount),0);
+  const month=todayISO().slice(0,7);
+  const monthTotal=DB.payments.filter(p=>p.date.slice(0,7)===month).reduce((s,p)=>s+Number(p.amount),0);
+  main.innerHTML=`
+    <div class="page-head">
+      <div><h2>결제 내역</h2><p>누적 ${vnd(total)} · 이번 달 ${vnd(monthTotal)}</p></div>
+      <button class="btn btn-primary" onclick="openPay()">+ 결제 등록</button>
+    </div>
+    <div class="panel"><div class="panel-body" id="payTable"></div></div>`;
+  drawPayments();
+}
+function drawPayments(){
+  const el=document.getElementById('payTable');
+  if(!DB.payments.length){el.innerHTML=`<div class="empty"><div class="big">💳</div>결제 내역이 없습니다.</div>`;return}
+  const list=[...DB.payments].sort((a,b)=>b.date.localeCompare(a.date));
+  el.innerHTML=`<table><thead><tr><th>날짜</th><th>회원</th><th>금액</th><th>메모</th><th></th></tr></thead><tbody>${
+    list.map(p=>`<tr>
+      <td class="muted">${p.date}</td>
+      <td>${memberName(p.memberId)}</td>
+      <td><strong>${vnd(p.amount)}</strong></td>
+      <td class="muted">${p.memo||'-'}</td>
+      <td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="delPay('${p.id}')">삭제</button></td>
+    </tr>`).join('')
+  }</tbody></table>`;
+}
+function openPay(){
+  const sel=document.getElementById('p_member');
+  sel.innerHTML=DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  document.getElementById('p_date').value=todayISO();
+  document.getElementById('p_amount').value='';
+  document.getElementById('p_memo').value='';
+  if(!DB.members.length){toast('먼저 회원을 등록하세요');return}
+  showModal('payModal');
+}
+function savePayment(){
+  const memberId=document.getElementById('p_member').value;
+  const amount=Number(document.getElementById('p_amount').value);
+  if(!memberId||!amount){toast('회원과 금액을 입력하세요');return}
+  DB.payments.push({id:id(),memberId,amount,date:document.getElementById('p_date').value||todayISO(),memo:document.getElementById('p_memo').value.trim()});
+  save();closeModal('payModal');render();toast('결제가 등록되었습니다');
+}
+function delPay(pid){
+  if(!confirm('이 결제 내역을 삭제할까요?'))return;
+  DB.payments=DB.payments.filter(p=>p.id!==pid);
+  save();render();toast('삭제되었습니다');
+}
+
+/* ================= Birthdays ================= */
+function renderBirthdays(){
+  const list=DB.members.filter(m=>m.birth).map(m=>({m,d:daysUntilBirthday(m.birth)})).sort((a,b)=>a.d-b.d);
+  main.innerHTML=`
+    <div class="page-head"><div><h2>생일</h2><p>다가오는 순서로 정렬</p></div></div>
+    ${list.length?`<div class="bday-list">${list.map(({m,d})=>{
+      const bd=new Date(m.birth);
+      const age=new Date().getFullYear()-bd.getFullYear();
+      return `<div class="bday ${d<=14?'soon':''}">
+        <div class="cake">${d===0?'🎉':'🎂'}</div>
+        <div>
+          <div style="font-weight:600">${m.name} ${m.kid?'<span class="tag tag-kid" style="margin-left:4px">어린이</span>':''}</div>
+          <div class="muted">${bd.toLocaleDateString('ko-KR',{month:'long',day:'numeric'})} · 곧 ${age+(d===0?0:1)}세</div>
+        </div>
+        <div class="when"><div class="d">${d===0?'오늘! 🥳':'D-'+d}</div></div>
+      </div>`}).join('')}</div>`
+    :`<div class="panel"><div class="empty"><div class="big">🎂</div>생일이 등록된 회원이 없습니다.</div></div>`}`;
+}
+
+/* ================= Modal utils ================= */
+function showModal(id){document.getElementById(id).classList.add('show')}
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('show')}));
+
+/* ================= Init ================= */
+save();
+render();
+</script>
+</body>
+</html>

@@ -414,6 +414,22 @@
   </div>
 </div>
 
+<div class="overlay" id="quitModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-head">
+      <h3>퇴원 처리</h3>
+      <button class="x" onclick="closeModal('quitModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" style="font-size:13px;margin-bottom:14px"><b id="quitName"></b> 회원의 퇴원 사유를 선택하세요. (기록은 보존됩니다)</p>
+      <div id="quitReasons"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('quitModal')">취소</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="importModal">
   <div class="modal" style="max-width:560px">
     <div class="modal-head">
@@ -554,7 +570,13 @@ function applySync(resp){
     if(p.phone) merged.phone=p.phone;
     if(p.birth) merged.birth=p.birth;
     if(p.join) merged.join=p.join;
+    if(p.quit){merged.quit=true; merged.quitDate=p.quitDate||''; if(p.quitReason)merged.quitReason=p.quitReason;}
     return merged;
+  });
+  // 시트에서 빠졌어도 '퇴원'으로 표시된 회원은 기록 보존을 위해 유지
+  const syncedIds={}; DB.members.forEach(function(m){syncedIds[m.id]=1;});
+  (Object.values(prev)).forEach(function(m){
+    if(m.quit && !syncedIds[m.id]) DB.members.push(m);
   });
   if(Array.isArray(resp.tiers)&&resp.tiers.length) DB.tiers=resp.tiers;
   DB.payments = Array.isArray(resp.payments)?resp.payments:[];
@@ -2570,8 +2592,10 @@ function render(){
 
 /* ================= Dashboard ================= */
 function renderDashboard(){
-  const total=DB.members.length;
-  const kids=DB.members.filter(m=>m.kid).length;
+  const active=DB.members.filter(m=>!m.quit);
+  const quitN=DB.members.length-active.length;
+  const total=active.length;
+  const kids=active.filter(m=>m.kid).length;
   const month=todayISO().slice(0,7);
   const monthRevenue=DB.payments.filter(p=>p.date.slice(0,7)===month).reduce((s,p)=>s+Number(p.amount),0);
   const todayAtt=DB.attendance.filter(a=>a.date===todayISO()).length;
@@ -2602,7 +2626,7 @@ function renderDashboard(){
       </div>
     </div>
     <div class="stat-grid">
-      <div class="stat"><div class="label">🧑‍🤝‍🧑 전체 회원</div><div class="value">${total}</div><div class="sub">어린이 ${kids}명 · 성인 ${total-kids}명</div></div>
+      <div class="stat"><div class="label">🧑‍🤝‍🧑 활동 회원</div><div class="value">${total}</div><div class="sub">어린이 ${kids} · 성인 ${total-kids}${quitN?' · 퇴원 '+quitN:''}</div></div>
       <div class="stat"><div class="label">💰 이번 달 매출</div><div class="value" style="font-size:24px">${vnd(monthRevenue)}</div><div class="sub">${DB.payments.filter(p=>p.date.slice(0,7)===month).length}건 결제</div></div>
       <div class="stat"><div class="label">✅ 오늘 출석</div><div class="value">${todayAtt}</div><div class="sub">명 출석 체크됨</div></div>
       <div class="stat"><div class="label">🎫 회원권 소진 임박</div><div class="value">${lowPasses}</div><div class="sub">잔여 2회 이하 / 소진</div></div>
@@ -2643,11 +2667,13 @@ function reseed(){
 }
 
 /* ================= Members ================= */
-let memberSearch='',memberFilter='all';
+let memberSearch='',memberFilter='active';
 function renderMembers(){
+  const activeN=DB.members.filter(m=>!m.quit).length;
+  const quitN=DB.members.length-activeN;
   main.innerHTML=`
     <div class="page-head">
-      <div><h2>회원 관리</h2><p>전체 ${DB.members.length}명 · 보강 잔여 합계 ${DB.members.reduce((a,m)=>a+(m.makeup||0),0)}회</p></div>
+      <div><h2>회원 관리</h2><p>활동 ${activeN}명${quitN?' · 퇴원 '+quitN+'명':''} · 보강 잔여 합계 ${DB.members.filter(m=>!m.quit).reduce((a,m)=>a+(m.makeup||0),0)}회</p></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost" onclick="reseed()">엑셀 명단 다시 불러오기</button>
         <button class="btn btn-primary" onclick="openMember()">+ 회원 추가</button>
@@ -2656,9 +2682,11 @@ function renderMembers(){
     <div class="searchbar">
       <input id="msearch" placeholder="이름·전화번호 검색…" value="${memberSearch}">
       <select id="mfilter">
-        <option value="all">전체</option>
+        <option value="active">활동중</option>
         <option value="kid">어린이</option>
         <option value="adult">성인</option>
+        <option value="quit">퇴원</option>
+        <option value="all">전체(퇴원 포함)</option>
       </select>
     </div>
     <div class="panel"><div class="panel-body" id="memberTable"></div></div>`;
@@ -2671,21 +2699,44 @@ function drawMembers(){
   let list=DB.members.filter(m=>{
     const q=memberSearch.toLowerCase();
     const okQ=!q||m.name.toLowerCase().includes(q)||(m.phone||'').includes(q);
-    const okF=memberFilter==='all'||(memberFilter==='kid'&&m.kid)||(memberFilter==='adult'&&!m.kid);
+    let okF=true;
+    if(memberFilter==='active') okF=!m.quit;
+    else if(memberFilter==='kid') okF=!m.quit&&m.kid;
+    else if(memberFilter==='adult') okF=!m.quit&&!m.kid;
+    else if(memberFilter==='quit') okF=!!m.quit;
+    else okF=true; // all
     return okQ&&okF;
+  });
+  list.sort(function(a,b){
+    // 전체 보기에선 활동중 먼저, 그 안에서 가나다순
+    if(memberFilter==='all' && (!!a.quit)!==(!!b.quit)) return a.quit?1:-1;
+    return (a.name||'').localeCompare(b.name||'','ko');
   });
   const el=document.getElementById('memberTable');
   if(!list.length){el.innerHTML=`<div class="empty"><div class="big">🔍</div>해당하는 회원이 없습니다.</div>`;return}
-  el.innerHTML=`<table><thead><tr><th>회원</th><th>나이·성별</th><th>학년·학교</th><th>회원권</th><th>보강</th><th></th></tr></thead><tbody>${
-    list.map(m=>{const s=passStatus(m);const ag=curAge(m);return `<tr>
-      <td><div class="name-cell clickable" onclick="openDetail('${m.id}')"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}${m.first?' <span class="tag tag-active" style="margin-left:4px">첫수업</span>':''}</div></td>
+  let reasonPanel='';
+  if(memberFilter==='quit'){
+    const c=quitReasonStats();
+    const totalQ=Object.values(c).reduce((a,b)=>a+b,0)||1;
+    const rows=QUIT_REASONS.concat([{k:'none',label:'미입력'}]).filter(r=>c[r.k]>0).map(function(r){
+      const pct=Math.round(c[r.k]/totalQ*100);
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span style="font-weight:600">${r.label}</span><span class="muted">${c[r.k]}명 · ${pct}%</span></div>
+        <div style="background:var(--bg-soft);border-radius:6px;height:8px;overflow:hidden"><div style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--coral),var(--gold));border-radius:6px"></div></div>
+      </div>`;
+    }).join('');
+    reasonPanel=`<div style="margin-bottom:18px"><h4 class="detail-h" style="margin-top:0">📊 퇴원 사유 비율 <span class="muted" style="font-weight:400">총 ${totalQ}명</span></h4>${rows}</div>`;
+  }
+  el.innerHTML=reasonPanel+`<table><thead><tr><th>회원</th><th>나이·성별</th><th>학년·학교</th><th>회원권</th><th>보강</th><th></th></tr></thead><tbody>${
+    list.map(m=>{const s=passStatus(m);const ag=curAge(m);return `<tr${m.quit?' style="opacity:.55"':''}>
+      <td><div class="name-cell clickable" onclick="openDetail('${m.id}')"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}${m.quit?` <span class="tag tag-expired" style="margin-left:4px">퇴원</span><span class="muted" style="font-size:11px;margin-left:4px">${quitReasonLabel(m.quitReason)}</span>`:(m.first?' <span class="tag tag-active" style="margin-left:4px">첫수업</span>':'')}</div></td>
       <td class="muted">${ag?ag+'세':'-'}${m.gender?' · '+genderKo(m.gender):''}</td>
       <td class="muted">${gradeLabel(m)||'-'}${m.school?' · '+m.school:''}</td>
       <td>${tierName(m.tierId)} <span class="tag ${s.cls}" style="margin-left:4px">${s.label}</span></td>
       <td>${m.makeup>0?`<span class="tag tag-low">${m.makeup}회</span>`:'<span class="muted">0</span>'}</td>
       <td style="text-align:right;white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="openDetail('${m.id}')">상세</button>
-        <button class="btn btn-ghost btn-sm" onclick="openMember('${m.id}')">수정</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleQuit('${m.id}')">${m.quit?'복귀':'퇴원'}</button>
         <button class="btn btn-danger btn-sm" onclick="delMember('${m.id}')">삭제</button>
       </td>
     </tr>`}).join('')
@@ -2742,6 +2793,41 @@ function delMember(mid){
   DB.payments=DB.payments.filter(p=>p.memberId!==mid);
   save();render();toast('삭제되었습니다');
 }
+const QUIT_REASONS=[
+  {k:'return', label:'한국 복귀·이사'},
+  {k:'teacher', label:'다른 선생님께'},
+  {k:'stamina', label:'아이 체력 문제'},
+  {k:'etc', label:'기타'}
+];
+function quitReasonLabel(k){ const r=QUIT_REASONS.find(x=>x.k===k); return r?r.label:'미입력'; }
+function quitReasonStats(){
+  const c={}; QUIT_REASONS.forEach(r=>c[r.k]=0); c['none']=0;
+  DB.members.filter(m=>m.quit).forEach(function(m){
+    const k=m.quitReason; if(k&&c[k]!=null)c[k]++; else c['none']++;
+  });
+  return c;
+}
+let pendingQuitId=null;
+function toggleQuit(mid){
+  const m=DB.members.find(x=>x.id===mid); if(!m)return;
+  if(!m.quit){ openQuit(mid); }
+  else { m.quit=false; delete m.quitDate; delete m.quitReason; save();render();toast(m.name+' 복귀 처리되었습니다'); }
+}
+function openQuit(mid){
+  pendingQuitId=mid;
+  const m=DB.members.find(x=>x.id===mid);
+  document.getElementById('quitName').textContent=m?m.name:'';
+  document.getElementById('quitReasons').innerHTML=QUIT_REASONS.map(function(r){
+    return `<button class="btn btn-ghost" style="justify-content:flex-start;width:100%;margin-bottom:8px" onclick="confirmQuit('${r.k}')">${r.label}</button>`;
+  }).join('');
+  showModal('quitModal');
+}
+function confirmQuit(k){
+  const m=DB.members.find(x=>x.id===pendingQuitId); if(!m){closeModal('quitModal');return;}
+  m.quit=true; m.quitDate=todayISO(); m.quitReason=k;
+  pendingQuitId=null;
+  save();closeModal('quitModal');render();toast(m.name+' 퇴원 처리 ('+quitReasonLabel(k)+')');
+}
 
 function openDetail(mid){
   const m=DB.members.find(x=>x.id===mid); if(!m)return;
@@ -2768,6 +2854,11 @@ function openDetail(mid){
     ['등록일', m.join||'-'],
     ['생일', m.birth||'-'],
   ];
+  if(m.quit){
+    info.push(['상태', '퇴원']);
+    info.push(['퇴원 사유', quitReasonLabel(m.quitReason)]);
+    if(m.quitDate) info.push(['퇴원일', m.quitDate]);
+  }
   document.getElementById('detailTitle').textContent=m.name+' 상세';
   document.getElementById('detailBody').innerHTML=`
     <div class="name-cell" style="margin-bottom:16px;gap:12px">
@@ -3023,16 +3114,199 @@ function delTier(tid){
 }
 
 /* ================= Payments ================= */
+function ymLabel(ym){ const [y,m]=ym.split('-'); return y+'년 '+Number(m)+'월'; }
+function monthlyRevenue(){
+  const map={};
+  DB.payments.forEach(function(p){
+    const ym=(p.date||'').slice(0,7); if(!ym) return;
+    if(!map[ym]) map[ym]={ym:ym,total:0,count:0,Cash:0,Transfer:0,Card:0,Etc:0};
+    const amt=Number(p.amount)||0;
+    map[ym].total+=amt; map[ym].count++;
+    if(p.method==='Cash') map[ym].Cash+=amt;
+    else if(p.method==='Transfer') map[ym].Transfer+=amt;
+    else if(p.method==='Card') map[ym].Card+=amt;
+    else map[ym].Etc+=amt;
+  });
+  return Object.values(map).sort(function(a,b){return b.ym.localeCompare(a.ym);});
+}
+function methodTotals(payments){
+  const t={Cash:0,Transfer:0,Card:0,Etc:0,total:0};
+  payments.forEach(function(p){
+    const amt=Number(p.amount)||0; t.total+=amt;
+    if(p.method==='Cash') t.Cash+=amt;
+    else if(p.method==='Transfer') t.Transfer+=amt;
+    else if(p.method==='Card') t.Card+=amt;
+    else t.Etc+=amt;
+  });
+  return t;
+}
+function newVsRenewal(){
+  // 사람별 첫 결제 = 신규, 이후 결제 = 재등록
+  const byPerson={};
+  DB.payments.forEach(function(p){
+    const key=p.memberId||('name:'+(p.name||''));
+    (byPerson[key]=byPerson[key]||[]).push(p);
+  });
+  const r={newAmt:0,newCnt:0,renewAmt:0,renewCnt:0};
+  Object.values(byPerson).forEach(function(arr){
+    arr.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+    arr.forEach(function(p,i){
+      const amt=Number(p.amount)||0;
+      if(i===0){r.newAmt+=amt;r.newCnt++;} else {r.renewAmt+=amt;r.renewCnt++;}
+    });
+  });
+  return r;
+}
+const WD_KO=['일','월','화','수','목','금','토'];
+function weekdayPattern(){
+  const wd=WD_KO.map(function(d){return {label:d,amt:0,cnt:0};});
+  DB.payments.forEach(function(p){
+    const s=(p.date||'').split('-'); if(s.length<3) return;
+    const dow=new Date(Number(s[0]),Number(s[1])-1,Number(s[2])).getDay();
+    wd[dow].amt+=Number(p.amount)||0; wd[dow].cnt++;
+  });
+  return wd;
+}
+const METHOD_META=[
+  {key:'Cash',label:'현금',color:'var(--aqua)'},
+  {key:'Transfer',label:'이체',color:'var(--wave)'},
+  {key:'Card',label:'카드',color:'var(--gold)'},
+  {key:'Etc',label:'기타',color:'var(--ink-faint)'}
+];
+function donutSVG(t){
+  const C=2*Math.PI*50, total=t.total||1; let off=0;
+  const segs=METHOD_META.filter(m=>t[m.key]>0).map(function(m){
+    const len=t[m.key]/total*C;
+    const s=`<circle cx="60" cy="60" r="50" fill="none" stroke="${m.color}" stroke-width="16" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 60 60)" stroke-linecap="butt"/>`;
+    off+=len; return s;
+  }).join('');
+  return `<svg viewBox="0 0 120 120" width="150" height="150" style="flex-shrink:0">
+    <circle cx="60" cy="60" r="50" fill="none" stroke="var(--bg-soft)" stroke-width="16"/>
+    ${segs}
+    <text x="60" y="55" text-anchor="middle" fill="var(--ink-dim)" style="font-size:9px">총 매출</text>
+    <text x="60" y="70" text-anchor="middle" fill="var(--ink)" style="font-size:11px;font-weight:700">${(total/1e6).toFixed(0)}M</text>
+  </svg>`;
+}
 function renderPayments(){
   const total=DB.payments.reduce((s,p)=>s+Number(p.amount),0);
   const month=todayISO().slice(0,7);
-  const monthTotal=DB.payments.filter(p=>p.date.slice(0,7)===month).reduce((s,p)=>s+Number(p.amount),0);
+  const monthPays=DB.payments.filter(p=>p.date.slice(0,7)===month);
+  const monthTotal=monthPays.reduce((s,p)=>s+Number(p.amount),0);
+  const months=monthlyRevenue();
+  const avgMonth=months.length?Math.round(total/months.length):0;
+  const mt=methodTotals(DB.payments);
+
+  // 요약 카드
+  const cards=`<div class="stat-grid" style="margin-bottom:20px">
+    <div class="stat"><div class="label">💰 누적 매출</div><div class="value" style="font-size:22px">${vnd(total)}</div><div class="sub">${DB.payments.length}건</div></div>
+    <div class="stat"><div class="label">📅 이번 달</div><div class="value" style="font-size:22px">${vnd(monthTotal)}</div><div class="sub">${monthPays.length}건</div></div>
+    <div class="stat"><div class="label">📊 월 평균</div><div class="value" style="font-size:22px">${vnd(avgMonth)}</div><div class="sub">${months.length}개월 기준</div></div>
+    <div class="stat"><div class="label">🧾 건당 평균</div><div class="value" style="font-size:22px">${vnd(DB.payments.length?Math.round(total/DB.payments.length):0)}</div><div class="sub">결제 1건당</div></div>
+  </div>`;
+
+  // 결제수단 도넛 + 범례
+  const legend=METHOD_META.filter(m=>mt[m.key]>0).map(function(m){
+    const pct=mt.total?Math.round(mt[m.key]/mt.total*100):0;
+    return `<div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+      <span style="width:12px;height:12px;border-radius:3px;background:${m.color};flex-shrink:0"></span>
+      <span style="min-width:34px;font-weight:600">${m.label}</span>
+      <span style="flex:1;text-align:right"><strong>${vnd(mt[m.key])}</strong></span>
+      <span class="muted" style="min-width:38px;text-align:right;font-size:12px">${pct}%</span>
+    </div>`;
+  }).join('');
+  const methodPanel=`<div class="panel" style="margin-bottom:20px">
+    <div class="panel-head"><h3>💳 결제수단 비율</h3></div>
+    <div class="panel-body" style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+      ${donutSVG(mt)}
+      <div style="flex:1;min-width:200px">${legend||'<span class="muted">결제 내역이 없습니다.</span>'}</div>
+    </div>
+  </div>`;
+
+  // 월별 매출 (전월 대비 증감)
+  const maxTotal=months.reduce((m,x)=>Math.max(m,x.total),0)||1;
+  const monthlyHTML = months.length ? months.map(function(x,i){
+    const pct=Math.round(x.total/maxTotal*100);
+    const prev=months[i+1]; // 한 칸 뒤가 더 이른 달
+    let delta='';
+    if(prev && prev.total>0){
+      const d=Math.round((x.total-prev.total)/prev.total*100);
+      const up=d>=0;
+      delta=`<span style="font-size:11.5px;color:${up?'var(--aqua)':'var(--coral)'};font-weight:600">${up?'▲':'▼'} ${Math.abs(d)}%</span>`;
+    }
+    const seg=METHOD_META.filter(m=>x[m.key]>0).map(m=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:${m.color}"></span>${m.label} ${vnd(x[m.key])}</span>`).join('');
+    return `<div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+        <span style="font-weight:600">${ymLabel(x.ym)} ${delta}</span>
+        <span><strong style="font-size:15px">${vnd(x.total)}</strong> <span class="muted" style="font-size:12px">· ${x.count}건</span></span>
+      </div>
+      <div style="background:var(--bg-soft);border-radius:8px;height:10px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--aqua),var(--wave));border-radius:8px"></div>
+      </div>
+      ${seg?`<div class="muted" style="font-size:11px;margin-top:5px;display:flex;gap:14px;flex-wrap:wrap">${seg}</div>`:''}
+    </div>`;
+  }).join('') : `<div class="muted" style="padding:8px 0">결제 내역이 없습니다.</div>`;
+
+  // 신규 vs 재등록
+  const nr=newVsRenewal();
+  const nrTotal=nr.newAmt+nr.renewAmt||1;
+  const newPct=Math.round(nr.newAmt/nrTotal*100);
+  const renewPct=100-newPct;
+  const nrPanel=`<div class="panel" style="margin-bottom:20px">
+    <div class="panel-head"><h3>🆕 신규 vs 재등록 매출</h3></div>
+    <div class="panel-body">
+      <div style="display:flex;height:26px;border-radius:8px;overflow:hidden;margin-bottom:14px;background:var(--bg-soft)">
+        <div style="width:${newPct}%;background:var(--coral);min-width:${nr.newAmt?'2px':'0'}"></div>
+        <div style="width:${renewPct}%;background:var(--aqua);min-width:${nr.renewAmt?'2px':'0'}"></div>
+      </div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div style="flex:1;min-width:170px;display:flex;align-items:center;gap:9px">
+          <span style="width:12px;height:12px;border-radius:3px;background:var(--coral);flex-shrink:0"></span>
+          <span style="font-weight:600">신규</span>
+          <span style="flex:1;text-align:right"><strong>${vnd(nr.newAmt)}</strong> <span class="muted" style="font-size:12px">· ${nr.newCnt}건 · ${newPct}%</span></span>
+        </div>
+        <div style="flex:1;min-width:170px;display:flex;align-items:center;gap:9px">
+          <span style="width:12px;height:12px;border-radius:3px;background:var(--aqua);flex-shrink:0"></span>
+          <span style="font-weight:600">재등록</span>
+          <span style="flex:1;text-align:right"><strong>${vnd(nr.renewAmt)}</strong> <span class="muted" style="font-size:12px">· ${nr.renewCnt}건 · ${renewPct}%</span></span>
+        </div>
+      </div>
+      <p class="muted" style="font-size:11px;margin-top:10px">각 회원의 첫 결제를 신규, 그 이후 결제를 재등록으로 집계합니다.</p>
+    </div>
+  </div>`;
+
+  // 요일별 결제 패턴
+  const wd=weekdayPattern();
+  const wdMax=wd.reduce((m,x)=>Math.max(m,x.amt),0)||1;
+  const wdBars=wd.map(function(x,i){
+    const h=Math.round(x.amt/wdMax*100);
+    const wkend=(i===0||i===6);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px">
+      <div class="muted" style="font-size:10px;height:14px">${x.cnt||''}</div>
+      <div style="width:100%;max-width:34px;height:110px;display:flex;align-items:flex-end">
+        <div title="${vnd(x.amt)}" style="width:100%;height:${h}%;min-height:${x.amt?'3px':'0'};border-radius:6px 6px 0 0;background:${wkend?'var(--gold)':'linear-gradient(180deg,var(--wave),var(--aqua))'}"></div>
+      </div>
+      <div style="font-weight:600;font-size:13px;color:${wkend?'var(--gold)':'var(--ink)'}">${x.label}</div>
+    </div>`;
+  }).join('');
+  const wdPanel=`<div class="panel" style="margin-bottom:20px">
+    <div class="panel-head"><h3>📅 요일별 결제 패턴</h3><span class="muted" style="font-size:12px">막대=매출 · 위 숫자=건수</span></div>
+    <div class="panel-body"><div style="display:flex;gap:8px;align-items:flex-end">${wdBars}</div></div>
+  </div>`;
+
   main.innerHTML=`
     <div class="page-head">
-      <div><h2>결제 내역</h2><p>누적 ${vnd(total)} · 이번 달 ${vnd(monthTotal)}</p></div>
+      <div><h2>매출 분석</h2><p>누적 ${vnd(total)} · 이번 달 ${vnd(monthTotal)}</p></div>
       <button class="btn btn-primary" onclick="openPay()">+ 결제 등록</button>
     </div>
-    <div class="panel"><div class="panel-body" id="payTable"></div></div>`;
+    ${cards}
+    ${methodPanel}
+    ${nrPanel}
+    ${wdPanel}
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-head"><h3>📈 월별 매출</h3><span class="muted" style="font-size:12px">${months.length}개월 · 전월 대비</span></div>
+      <div class="panel-body">${monthlyHTML}</div>
+    </div>
+    <div class="panel"><div class="panel-head"><h3>전체 결제 내역</h3></div><div class="panel-body" id="payTable"></div></div>`;
   drawPayments();
 }
 function drawPayments(){

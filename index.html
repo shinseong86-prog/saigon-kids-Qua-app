@@ -3468,7 +3468,7 @@ function drawPayments(){
 }
 function openPay(){
   const sel=document.getElementById('p_member');
-  sel.innerHTML=DB.members.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  sel.innerHTML=sortMembersKo(DB.members).map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
   document.getElementById('p_date').value=todayISO();
   document.getElementById('p_amount').value='';
   document.getElementById('p_memo').value='';

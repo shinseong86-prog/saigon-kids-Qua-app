@@ -3115,6 +3115,69 @@ function delTier(tid){
 
 /* ================= Payments ================= */
 function ymLabel(ym){ const [y,m]=ym.split('-'); return y+'년 '+Number(m)+'월'; }
+
+/* ---- 수업료 납부 현황 (학생별 미지급 확인) ---- */
+let tuitionMonth = todayISO().slice(0,7);
+let tuitionFilter = 'all'; // 'all' | 'unpaid'
+function shiftTuitionMonth(delta){
+  let [y,m]=tuitionMonth.split('-').map(Number); m+=delta;
+  if(m<1){m=12;y--;} if(m>12){m=1;y++;}
+  tuitionMonth=y+'-'+String(m).padStart(2,'0');
+  drawTuitionPanel();
+}
+function setTuitionFilter(f){ tuitionFilter=f; drawTuitionPanel(); }
+function tuitionStatusCls(s){
+  return s==='완납'?'tag-active':s==='미납'?'tag-expired':s==='부분납부'?'tag-low':'tag-adult';
+}
+function tuitionStatus(ym){
+  const active=DB.members.filter(m=>!m.quit);
+  return active.map(function(m){
+    const t=tierOf(m.tierId);
+    const price=t?Number(t.price)||0:0;
+    const pays=DB.payments.filter(p=>p.memberId===m.id && (p.date||'').slice(0,7)===ym);
+    const paidAmt=pays.reduce((s,p)=>s+(Number(p.amount)||0),0);
+    const allPays=DB.payments.filter(p=>p.memberId===m.id).sort((a,b)=>b.date.localeCompare(a.date));
+    let status;
+    if(!t||!price) status='미지정';
+    else if(paidAmt<=0) status='미납';
+    else if(paidAmt<price) status='부분납부';
+    else status='완납';
+    return {member:m, tier:t, price, paidAmt, payCount:pays.length, lastDate:allPays[0]?allPays[0].date:'', status};
+  }).sort(function(a,b){
+    const order={'미납':0,'부분납부':1,'미지정':2,'완납':3};
+    if(order[a.status]!==order[b.status]) return order[a.status]-order[b.status];
+    return a.member.name.localeCompare(b.member.name,'ko');
+  });
+}
+function drawTuitionPanel(){
+  const wrapLabel=document.getElementById('tuitionMonthLabel');
+  const body=document.getElementById('tuitionPanelBody');
+  if(!wrapLabel||!body) return;
+  const list=tuitionStatus(tuitionMonth);
+  const counts={완납:0,미납:0,부분납부:0,미지정:0};
+  list.forEach(x=>counts[x.status]++);
+  const shown = tuitionFilter==='unpaid' ? list.filter(x=>x.status==='미납'||x.status==='부분납부') : list;
+  const summary=`<div class="stat-grid" style="margin-bottom:16px">
+    <div class="stat"><div class="label">✅ 완납</div><div class="value">${counts.완납}명</div></div>
+    <div class="stat"><div class="label">⚠️ 부분납부</div><div class="value">${counts.부분납부}명</div></div>
+    <div class="stat"><div class="label">❌ 미납</div><div class="value">${counts.미납}명</div></div>
+    <div class="stat"><div class="label">➖ 회원권 미지정</div><div class="value">${counts.미지정}명</div></div>
+  </div>`;
+  const filterBar=`<div class="tabs" style="margin-bottom:12px">
+    <button class="tab ${tuitionFilter==='all'?'on':''}" onclick="setTuitionFilter('all')">전체 ${list.length}</button>
+    <button class="tab ${tuitionFilter==='unpaid'?'on':''}" onclick="setTuitionFilter('unpaid')">미납·부분납부만 ${counts.미납+counts.부분납부}</button>
+  </div>`;
+  const rows=shown.map(x=>`<tr style="cursor:pointer" onclick="openDetail('${x.member.id}')">
+      <td>${x.member.name}</td>
+      <td class="muted">${x.tier?x.tier.name:'미지정'}</td>
+      <td class="muted">${x.price?vnd(x.price):'-'}</td>
+      <td><strong>${vnd(x.paidAmt)}</strong>${x.payCount?` <span class="muted" style="font-size:11px">(${x.payCount}건)</span>`:''}</td>
+      <td><span class="tag ${tuitionStatusCls(x.status)}">${x.status}</span></td>
+      <td class="muted">${x.lastDate||'-'}</td>
+    </tr>`).join('') || `<tr><td colspan="6" class="muted" style="text-align:center;padding:16px">해당하는 학생이 없습니다.</td></tr>`;
+  wrapLabel.textContent=ymLabel(tuitionMonth);
+  body.innerHTML=summary+filterBar+`<table><thead><tr><th>이름</th><th>회원권</th><th>월 회비</th><th>${ymLabel(tuitionMonth)} 결제액</th><th>상태</th><th>최근 결제일</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
 function monthlyRevenue(){
   const map={};
   DB.payments.forEach(function(p){
@@ -3299,6 +3362,17 @@ function renderPayments(){
       <button class="btn btn-primary" onclick="openPay()">+ 결제 등록</button>
     </div>
     ${cards}
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-head">
+        <h3>🧾 수업료 납부 현황</h3>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="shiftTuitionMonth(-1)">‹</button>
+          <span id="tuitionMonthLabel" style="font-weight:600;min-width:86px;text-align:center;display:inline-block">${ymLabel(tuitionMonth)}</span>
+          <button class="btn btn-ghost btn-sm" onclick="shiftTuitionMonth(1)">›</button>
+        </div>
+      </div>
+      <div class="panel-body" id="tuitionPanelBody"></div>
+    </div>
     ${methodPanel}
     ${nrPanel}
     ${wdPanel}
@@ -3308,6 +3382,7 @@ function renderPayments(){
     </div>
     <div class="panel"><div class="panel-head"><h3>전체 결제 내역</h3></div><div class="panel-body" id="payTable"></div></div>`;
   drawPayments();
+  drawTuitionPanel();
 }
 function drawPayments(){
   const el=document.getElementById('payTable');

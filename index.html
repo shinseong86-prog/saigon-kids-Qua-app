@@ -2879,27 +2879,38 @@ function openDetail(mid){
 let attDate=todayISO();
 let attMonth=todayISO().slice(0,7);
 let attTab='month';
+const isEngName = s => /^[A-Za-z]/.test((s||'').trim());
+function sortMembersKo(list){
+  return [...list].sort(function(a,b){
+    const ae=isEngName(a.name), be=isEngName(b.name);
+    if(ae && !be) return -1;
+    if(!ae && be) return 1;
+    return (a.name||'').localeCompare(b.name||'', ae?'en':'ko');
+  });
+}
 
 const monthLabel = ym => { const [y,m]=ym.split('-'); return y+'년 '+(+m)+'월'; };
 function quotaOf(m){ const t=tierOf(m.tierId); if(t&&t.sessions) return t.sessions; if(t&&t.perWeek) return t.perWeek*4; return 0; }
 function shiftMonth(delta){
   let [y,m]=attMonth.split('-').map(Number); m+=delta;
   if(m<1){m=12;y--;} if(m>12){m=1;y++;}
-  attMonth=y+'-'+String(m).padStart(2,'0'); drawMonthAtt();
+  attMonth=y+'-'+String(m).padStart(2,'0');
+  if(attTab==='grid') drawGridAtt(); else drawMonthAtt();
 }
 function setAttTab(t){ attTab=t; renderAttendance(); }
 
 function renderAttendance(){
   main.innerHTML=`
     <div class="page-head">
-      <div><h2>출석</h2><p>${attTab==='month'?'월별 정원(주1회 4 · 주2회 8 · 주3회 12) 기준 출석':'날짜별 출석 체크'}</p></div>
+      <div><h2>출석</h2><p>${attTab==='month'?'월별 정원(주1회 4 · 주2회 8 · 주3회 12) 기준 출석':attTab==='grid'?'한 화면에서 보는 전체 출결 현황':'날짜별 출석 체크'}</p></div>
     </div>
     <div class="tabs">
       <button class="tab ${attTab==='month'?'on':''}" onclick="setAttTab('month')">월별</button>
       <button class="tab ${attTab==='day'?'on':''}" onclick="setAttTab('day')">일별</button>
+      <button class="tab ${attTab==='grid'?'on':''}" onclick="setAttTab('grid')">전체보기</button>
     </div>
     <div id="attWrap"></div>`;
-  if(attTab==='month') drawMonthAtt(); else drawDayAtt();
+  if(attTab==='month') drawMonthAtt(); else if(attTab==='grid') drawGridAtt(); else drawDayAtt();
 }
 
 /* ---- 월별: 정원만큼 동그라미를 채우는 방식 ---- */
@@ -2916,7 +2927,7 @@ function drawMonthAtt(){
   let totUsed=0,totQuota=0;
   DB.members.forEach(m=>{ totUsed+=monthlyUsed(m.id,attMonth); totQuota+=quotaOf(m); });
   const rate=totQuota?Math.round(totUsed/totQuota*100):0;
-  const rows=DB.members.map(m=>{
+  const rows=sortMembersKo(DB.members).map(m=>{
     const recs=DB.attendance.filter(a=>a.memberId===m.id && (a.date||'').slice(0,7)===attMonth)
       .sort((a,b)=>(a.date+a.id).localeCompare(b.date+b.id));
     const non=recs.filter(a=>(a.status||'present')!=='absent');     // 출석+보강 (정원 소진)
@@ -3037,7 +3048,7 @@ function drawDayTable(){
       <span>보강 <b style="color:var(--ink)">${c.makeup}</b></span>
     </div>
     <table><thead><tr><th>회원</th><th>이번 달</th><th style="text-align:right">출석 상태</th></tr></thead><tbody>${
-    DB.members.map(m=>{const used=monthlyUsed(m.id,attDate.slice(0,7));const q=quotaOf(m);return `<tr>
+    sortMembersKo(DB.members).map(m=>{const used=monthlyUsed(m.id,attDate.slice(0,7));const q=quotaOf(m);return `<tr>
         <td><div class="name-cell clickable" onclick="openDetail('${m.id}')"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}</div></td>
         <td class="muted">${used}/${q||'-'}</td>
         <td style="text-align:right"><div class="att-btns">${btn(m.id,'present','출석')}${btn(m.id,'absent','결석')}${btn(m.id,'makeup','보강')}</div></td>
@@ -3053,6 +3064,62 @@ function setAtt(mid,st){
     DB.attendance.push({id:id(),memberId:mid,date:attDate,status:st,src:'app'});
   }
   save();drawDayTable();
+}
+
+/* ---- 전체보기: 한 달치 출결을 학생×날짜 표로 한눈에 ---- */
+function drawGridAtt(){
+  const wrap=document.getElementById('attWrap');
+  if(!DB.members.length){wrap.innerHTML=`<div class="empty"><div class="big">🧑‍🤝‍🧑</div>먼저 회원을 등록하세요.</div>`;return}
+  const [y,mo]=attMonth.split('-').map(Number);
+  const daysInMonth=new Date(y,mo,0).getDate();
+  const dayNums=Array.from({length:daysInMonth},(_,i)=>i+1);
+  const list=sortMembersKo(DB.members);
+  const byMember={};
+  DB.attendance.forEach(function(a){
+    if((a.date||'').slice(0,7)!==attMonth) return;
+    const day=Number((a.date||'').slice(8,10)); if(!day) return;
+    (byMember[a.memberId]=byMember[a.memberId]||{})[day]=a.status||'present';
+  });
+  const ICON={present:'●',absent:'✕',makeup:'M'};
+  const COLOR={present:'var(--aqua)',absent:'var(--danger)',makeup:'var(--gold)'};
+  const headCells=dayNums.map(function(d){
+    const dow=new Date(y,mo-1,d).getDay(); const wkend=(dow===0||dow===6);
+    return `<th style="text-align:center;min-width:24px;font-weight:500;font-size:11px;color:${wkend?'var(--gold)':'var(--ink-dim)'};padding:6px 2px">${d}</th>`;
+  }).join('');
+  const rows=list.map(function(m){
+    const recs=byMember[m.id]||{};
+    let p=0,ab=0,mk=0;
+    const cells=dayNums.map(function(d){
+      const st=recs[d];
+      if(!st) return `<td style="text-align:center;color:var(--line-strong)">·</td>`;
+      if(st==='present')p++; else if(st==='absent')ab++; else if(st==='makeup')mk++;
+      return `<td style="text-align:center;font-weight:700;color:${COLOR[st]||COLOR.present}" title="${attStatusKo(st)} · ${mo}/${d}" onclick="openDetail('${m.id}')" class="clickable">${ICON[st]||'●'}</td>`;
+    }).join('');
+    return `<tr>
+      <td style="position:sticky;left:0;background:var(--panel);white-space:nowrap;z-index:1">
+        <div class="name-cell clickable" onclick="openDetail('${m.id}')"><div class="avatar" style="width:26px;height:26px;font-size:10px;background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}</div>
+      </td>
+      ${cells}
+      <td class="muted" style="text-align:center;white-space:nowrap;font-size:11.5px">${p}<span style="color:var(--gold)"> · ${mk}</span><span style="color:var(--danger)"> · ${ab}</span></td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML=`
+    <div class="month-nav">
+      <button class="btn btn-ghost btn-sm" onclick="shiftMonth(-1)">◀</button>
+      <span class="month-label">${monthLabel(attMonth)}</span>
+      <button class="btn btn-ghost btn-sm" onclick="shiftMonth(1)">▶</button>
+      <span class="muted" style="margin-left:14px;font-size:12px">● 출석 · <span style="color:var(--gold)">M 보강</span> · <span style="color:var(--danger)">✕ 결석</span></span>
+    </div>
+    <div class="panel"><div class="panel-body" style="overflow-x:auto;padding:14px 0">
+      <table style="border-collapse:collapse;font-size:12.5px">
+        <thead><tr>
+          <th style="position:sticky;left:0;background:var(--panel);text-align:left;padding:6px 12px 6px 22px;z-index:1">이름</th>
+          ${headCells}
+          <th class="muted" style="text-align:center;font-size:11px;padding:6px 12px">출/보/결</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div></div>`;
 }
 
 /* ================= Passes / tiers ================= */

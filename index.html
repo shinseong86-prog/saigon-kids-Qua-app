@@ -498,6 +498,21 @@
 /* ================= Storage ================= */
 const KEY = 'saigon_kidsqua_v3';
 const todayISO = () => new Date().toISOString().slice(0,10);
+/* 매출 인식 기준: 재등록이 전월 18~25일에 이뤄지므로, "전월 18일 ~ 당월 17일"을 당월 매출로 집계.
+   예) 7/18~8/17 사이 결제 → '2026-08'(8월 매출)로 계산 */
+function billingYm(dateStr){
+  const s=(dateStr||'').slice(0,10); const parts=s.split('-');
+  if(parts.length<3) return s.slice(0,7);
+  let y=Number(parts[0]), m=Number(parts[1]), d=Number(parts[2]);
+  if(!y||!m||!d) return s.slice(0,7);
+  if(d>=18){ m+=1; if(m>12){m=1;y+=1;} }
+  return y+'-'+String(m).padStart(2,'0');
+}
+function billingPeriodRange(ym){ // ym='YYYY-MM' → 해당 매출월의 실제 결제 집계 기간(문자열)
+  const [y,m]=ym.split('-').map(Number);
+  let py=y, pm=m-1; if(pm<1){pm=12;py--;}
+  return `${pm}/18 ~ ${m}/17`;
+}
 const SYNC_URL_KEY='saigon_sync_url';
 const SYNC_AT_KEY='saigon_sync_at';
 
@@ -592,6 +607,8 @@ function applySync(resp){
     sheetAtt=(DB.attendance||[]).filter(function(a){return a.src==='sheet' && ids[a.memberId];});
   }
   DB.attendance=manual.concat(sheetAtt);
+  // ★ 이번 주 보강 일정: 시트에서 온 {memberId, date} 목록 (요일 정규명단과 별개로 그 날짜에만 자동 반영)
+  DB.weeklyMakeup = Array.isArray(resp.weeklyMakeup) ? resp.weeklyMakeup.filter(function(w){return w && ids[w.memberId] && w.date;}) : [];
   localStorage.setItem(SYNC_AT_KEY,new Date().toISOString());
   save(); render();
   toast('동기화 완료 · 회원 '+DB.members.length+'명, 결제 '+DB.payments.length+'건, 출석 '+sheetAtt.length+'건');
@@ -2597,8 +2614,9 @@ function renderDashboard(){
   const quitN=DB.members.length-active.length;
   const total=active.length;
   const kids=active.filter(m=>m.kid).length;
-  const month=todayISO().slice(0,7);
-  const monthRevenue=DB.payments.filter(p=>p.date.slice(0,7)===month).reduce((s,p)=>s+Number(p.amount),0);
+  const month=billingYm(todayISO());
+  const monthPaysD=DB.payments.filter(p=>billingYm(p.date)===month);
+  const monthRevenue=monthPaysD.reduce((s,p)=>s+Number(p.amount),0);
   const todayAtt=DB.attendance.filter(a=>a.date===todayISO()).length;
   const lowPasses=DB.members.filter(m=>{const s=passStatus(m);return s.cls==='tag-low'||s.cls==='tag-expired'}).length;
   const soonBday=DB.members.filter(m=>{const d=daysUntilBirthday(m.birth);return d!==null&&d<=14}).length;
@@ -2628,7 +2646,7 @@ function renderDashboard(){
     </div>
     <div class="stat-grid">
       <div class="stat"><div class="label">🧑‍🤝‍🧑 활동 회원</div><div class="value">${total}</div><div class="sub">어린이 ${kids} · 성인 ${total-kids}${quitN?' · 퇴원 '+quitN:''}</div></div>
-      <div class="stat"><div class="label">💰 이번 달 매출</div><div class="value" style="font-size:24px">${vnd(monthRevenue)}</div><div class="sub">${DB.payments.filter(p=>p.date.slice(0,7)===month).length}건 결제</div></div>
+      <div class="stat"><div class="label">💰 이번 달 매출</div><div class="value" style="font-size:24px">${vnd(monthRevenue)}</div><div class="sub">${monthPaysD.length}건 결제 · ${billingPeriodRange(month)}</div></div>
       <div class="stat"><div class="label">✅ 오늘 출석</div><div class="value">${todayAtt}</div><div class="sub">명 출석 체크됨</div></div>
       <div class="stat"><div class="label">🎫 회원권 소진 임박</div><div class="value">${lowPasses}</div><div class="sub">잔여 2회 이하 / 소진</div></div>
       <div class="stat"><div class="label">🎂 다가오는 생일</div><div class="value">${soonBday}</div><div class="sub">2주 이내</div></div>
@@ -3040,7 +3058,7 @@ function drawDayAtt(){
   wrap.innerHTML=`
     <div class="month-nav">
       <input type="date" id="attDate" value="${attDate}" style="background:var(--bg-soft);border:1px solid var(--line-strong);color:var(--ink);padding:9px 13px;border-radius:10px;font-family:inherit">
-      <span class="muted" id="attDowLabel" style="margin-left:12px;font-size:12.5px">${dowLabel(attDate)} 정규반 명단 · 스케줄표 동기화하면 자동 반영</span>
+      <span class="muted" id="attDowLabel" style="margin-left:12px;font-size:12.5px">${dowLabel(attDate)} 정규반+보강 명단 · 스케줄표 동기화하면 자동 반영</span>
     </div>
     <div class="panel"><div class="panel-body" id="attTable"></div></div>
     <div class="panel" style="margin-top:14px"><div class="panel-body">
@@ -3051,7 +3069,7 @@ function drawDayAtt(){
     </div></div>`;
   document.getElementById('attDate').addEventListener('change',e=>{
     attDate=e.target.value; attExtraQuery='';
-    document.getElementById('attDowLabel').textContent=dowLabel(attDate)+' 정규반 명단 · 스케줄표 동기화하면 자동 반영';
+    document.getElementById('attDowLabel').textContent=dowLabel(attDate)+' 정규반+보강 명단 · 스케줄표 동기화하면 자동 반영';
     document.getElementById('attExtraSearch').value='';
     drawDayTable(); drawExtraResults();
   });
@@ -3059,10 +3077,14 @@ function drawDayAtt(){
   drawDayTable();
   drawExtraResults();
 }
+function makeupIdsForDate(dateStr){
+  return new Set((DB.weeklyMakeup||[]).filter(function(w){return w.date===dateStr;}).map(function(w){return w.memberId;}));
+}
 function regularsForToday(){
   const dow=dowCodeOf(attDate);
   const checkedIds=new Set(DB.attendance.filter(a=>a.date===attDate).map(a=>a.memberId));
-  return sortMembersKo(DB.members).filter(m=>(m.days||[]).includes(dow) || checkedIds.has(m.id));
+  const makeupIds=makeupIdsForDate(attDate);
+  return sortMembersKo(DB.members).filter(m=>(m.days||[]).includes(dow) || checkedIds.has(m.id) || makeupIds.has(m.id));
 }
 function drawDayTable(){
   const el=document.getElementById('attTable');
@@ -3070,6 +3092,8 @@ function drawDayTable(){
   const day=DB.attendance.filter(a=>a.date===attDate);
   const c={present:0,absent:0,makeup:0}; day.forEach(a=>c[a.status||'present']=(c[a.status||'present']||0)+1);
   const regulars=regularsForToday();
+  const dow=dowCodeOf(attDate);
+  const makeupIds=makeupIdsForDate(attDate);
   el.innerHTML=`
     <div style="display:flex;gap:14px;padding:0 22px 14px;font-size:12.5px" class="muted">
       <span>출석 <b style="color:var(--ink)">${c.present}</b></span>
@@ -3077,8 +3101,11 @@ function drawDayTable(){
       <span>보강 <b style="color:var(--ink)">${c.makeup}</b></span>
     </div>
     <table><thead><tr><th>회원</th><th>이번 달</th><th style="text-align:right">출석 상태</th></tr></thead><tbody>${
-    regulars.length ? regulars.map(m=>{const used=monthlyUsed(m.id,attDate.slice(0,7));const q=quotaOf(m);return `<tr>
-        <td><div class="name-cell clickable" onclick="openDetail('${m.id}')"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}</div></td>
+    regulars.length ? regulars.map(m=>{const used=monthlyUsed(m.id,attDate.slice(0,7));const q=quotaOf(m);
+      const isMakeupOnly=!(m.days||[]).includes(dow) && makeupIds.has(m.id);
+      const badge=isMakeupOnly?`<span class="tag" style="background:var(--gold);color:#fff;margin-left:6px;font-size:10.5px">보강</span>`:'';
+      return `<tr>
+        <td><div class="name-cell clickable" onclick="openDetail('${m.id}')"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}${badge}</div></td>
         <td class="muted">${used}/${q||'-'}</td>
         <td style="text-align:right">${attButtons(m.id)}</td>
       </tr>`}).join('') : `<tr><td colspan="3" class="muted" style="padding:18px 22px">오늘(${dowLabel(attDate)}) 정규반 회원이 없어요. 아래 검색창에서 보강 등으로 추가하세요.</td></tr>`
@@ -3244,7 +3271,7 @@ function tuitionStatus(ym){
   return active.map(function(m){
     const t=tierOf(m.tierId);
     const price=t?Number(t.price)||0:0;
-    const pays=DB.payments.filter(p=>p.memberId===m.id && (p.date||'').slice(0,7)===ym);
+    const pays=DB.payments.filter(p=>p.memberId===m.id && billingYm(p.date)===ym);
     const paidAmt=pays.reduce((s,p)=>s+(Number(p.amount)||0),0);
     const allPays=DB.payments.filter(p=>p.memberId===m.id).sort((a,b)=>b.date.localeCompare(a.date));
     let status;
@@ -3286,12 +3313,13 @@ function drawTuitionPanel(){
       <td class="muted">${x.lastDate||'-'}</td>
     </tr>`).join('') || `<tr><td colspan="6" class="muted" style="text-align:center;padding:16px">해당하는 학생이 없습니다.</td></tr>`;
   wrapLabel.textContent=ymLabel(tuitionMonth);
-  body.innerHTML=summary+filterBar+`<table><thead><tr><th>이름</th><th>회원권</th><th>월 회비</th><th>${ymLabel(tuitionMonth)} 결제액</th><th>상태</th><th>최근 결제일</th></tr></thead><tbody>${rows}</tbody></table>`;
+  wrapLabel.title=billingPeriodRange(tuitionMonth)+' 결제 기준';
+  body.innerHTML=summary+filterBar+`<p class="muted" style="font-size:11.5px;margin:-4px 0 12px">결제 기준: ${billingPeriodRange(tuitionMonth)} (재등록 기간 반영)</p><table><thead><tr><th>이름</th><th>회원권</th><th>월 회비</th><th>${ymLabel(tuitionMonth)} 결제액</th><th>상태</th><th>최근 결제일</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function monthlyRevenue(){
   const map={};
   DB.payments.forEach(function(p){
-    const ym=(p.date||'').slice(0,7); if(!ym) return;
+    if(!p.date) return; const ym=billingYm(p.date);
     if(!map[ym]) map[ym]={ym:ym,total:0,count:0,Cash:0,Transfer:0,Card:0,Etc:0};
     const amt=Number(p.amount)||0;
     map[ym].total+=amt; map[ym].count++;
@@ -3362,8 +3390,8 @@ function donutSVG(t){
 }
 function renderPayments(){
   const total=DB.payments.reduce((s,p)=>s+Number(p.amount),0);
-  const month=todayISO().slice(0,7);
-  const monthPays=DB.payments.filter(p=>p.date.slice(0,7)===month);
+  const month=billingYm(todayISO());
+  const monthPays=DB.payments.filter(p=>billingYm(p.date)===month);
   const monthTotal=monthPays.reduce((s,p)=>s+Number(p.amount),0);
   const months=monthlyRevenue();
   const avgMonth=months.length?Math.round(total/months.length):0;
@@ -3372,7 +3400,7 @@ function renderPayments(){
   // 요약 카드
   const cards=`<div class="stat-grid" style="margin-bottom:20px">
     <div class="stat"><div class="label">💰 누적 매출</div><div class="value" style="font-size:22px">${vnd(total)}</div><div class="sub">${DB.payments.length}건</div></div>
-    <div class="stat"><div class="label">📅 이번 달</div><div class="value" style="font-size:22px">${vnd(monthTotal)}</div><div class="sub">${monthPays.length}건</div></div>
+    <div class="stat"><div class="label">📅 이번 달</div><div class="value" style="font-size:22px">${vnd(monthTotal)}</div><div class="sub">${monthPays.length}건 · ${billingPeriodRange(month)}</div></div>
     <div class="stat"><div class="label">📊 월 평균</div><div class="value" style="font-size:22px">${vnd(avgMonth)}</div><div class="sub">${months.length}개월 기준</div></div>
     <div class="stat"><div class="label">🧾 건당 평균</div><div class="value" style="font-size:22px">${vnd(DB.payments.length?Math.round(total/DB.payments.length):0)}</div><div class="sub">결제 1건당</div></div>
   </div>`;
@@ -3409,7 +3437,7 @@ function renderPayments(){
     const seg=METHOD_META.filter(m=>x[m.key]>0).map(m=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:${m.color}"></span>${m.label} ${vnd(x[m.key])}</span>`).join('');
     return `<div style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
-        <span style="font-weight:600">${ymLabel(x.ym)} ${delta}</span>
+        <span style="font-weight:600" title="${billingPeriodRange(x.ym)}">${ymLabel(x.ym)} ${delta}</span>
         <span><strong style="font-size:15px">${vnd(x.total)}</strong> <span class="muted" style="font-size:12px">· ${x.count}건</span></span>
       </div>
       <div style="background:var(--bg-soft);border-radius:8px;height:10px;overflow:hidden">
@@ -3468,7 +3496,7 @@ function renderPayments(){
 
   main.innerHTML=`
     <div class="page-head">
-      <div><h2>매출 분석</h2><p>누적 ${vnd(total)} · 이번 달 ${vnd(monthTotal)}</p></div>
+      <div><h2>매출 분석</h2><p>누적 ${vnd(total)} · 이번 달 ${vnd(monthTotal)} <span class="muted" style="font-size:12px">(월 매출 기준: 전월 18일~당월 17일, 재등록 기간 반영)</span></p></div>
       <button class="btn btn-primary" onclick="openPay()">+ 결제 등록</button>
     </div>
     ${cards}

@@ -560,7 +560,8 @@ function applySync(resp){
   DB.members = resp.members.map(function(m){
     const p=prev[m.id]||{};
     const merged=Object.assign({phone:'',birth:'',kid:true,join:''}, p, {
-      id:m.id, name:m.name, gender:m.gender, makeup:m.makeup, tierId:m.tierId, first:m.first, age:m.age, kid:(m.kid!==undefined?m.kid:(p.kid!==undefined?p.kid:true))
+      id:m.id, name:m.name, gender:m.gender, makeup:m.makeup, tierId:m.tierId, first:m.first, age:m.age, kid:(m.kid!==undefined?m.kid:(p.kid!==undefined?p.kid:true)),
+      days:Array.isArray(m.days)?m.days:[]   // 스케줄표 요일 배열 ('mon'..'sun') · 매 동기화마다 최신으로 교체
     });
     // 학교·학년 등 직접 입력값 유지
     merged.school=p.school||m.school||'';
@@ -2879,6 +2880,10 @@ function openDetail(mid){
 let attDate=todayISO();
 let attMonth=todayISO().slice(0,7);
 let attTab='month';
+let attExtraQuery='';                     // 일별 탭: '오늘 목록에 없는 아이' 검색어
+const DOW_CODES=['sun','mon','tue','wed','thu','fri','sat'];
+const DOW_KO={mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토',sun:'일'};
+function dowCodeOf(dateStr){ return DOW_CODES[new Date(dateStr+'T00:00:00').getDay()]; }
 const isEngName = s => /^[A-Za-z]/.test((s||'').trim());
 function sortMembersKo(list){
   return [...list].sort(function(a,b){
@@ -3022,25 +3027,49 @@ function delAttEntry(){
   save();closeModal('attModal');drawMonthAtt();toast('삭제되었습니다');
 }
 
-/* ---- 일별: 특정 날짜 출석/결석/보강 체크 ---- */
+/* ---- 일별: 특정 날짜 출석/결석/보강 체크 (오늘 요일 정규반만 자동으로 좁혀서 보여줌) ---- */
 function attOn(mid){ return DB.attendance.find(a=>a.memberId===mid&&a.date===attDate); }
+function attBtn(mid,st,label){
+  const cur=attOn(mid); const on=cur&&(cur.status||'present')===st;
+  return `<button class="btn ${on?'btn-primary':'btn-ghost'} btn-sm" onclick="setAtt('${mid}','${st}')">${on?'✓ ':''}${label}</button>`;
+}
+function attButtons(mid){ return `<div class="att-btns">${attBtn(mid,'present','출석')}${attBtn(mid,'absent','결석')}${attBtn(mid,'makeup','보강')}</div>`; }
+function dowLabel(dateStr){ return DOW_KO[dowCodeOf(dateStr)]+'요일'; }
 function drawDayAtt(){
   const wrap=document.getElementById('attWrap');
   wrap.innerHTML=`
     <div class="month-nav">
       <input type="date" id="attDate" value="${attDate}" style="background:var(--bg-soft);border:1px solid var(--line-strong);color:var(--ink);padding:9px 13px;border-radius:10px;font-family:inherit">
+      <span class="muted" id="attDowLabel" style="margin-left:12px;font-size:12.5px">${dowLabel(attDate)} 정규반 명단 · 스케줄표 동기화하면 자동 반영</span>
     </div>
-    <div class="panel"><div class="panel-body" id="attTable"></div></div>`;
-  document.getElementById('attDate').addEventListener('change',e=>{attDate=e.target.value;drawDayTable()});
+    <div class="panel"><div class="panel-body" id="attTable"></div></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-body">
+      <div class="searchbar" style="margin-bottom:4px">
+        <input id="attExtraSearch" placeholder="오늘 목록에 없는 아이 검색 (보강 등)…" value="${attExtraQuery}">
+      </div>
+      <div id="attExtraResults"></div>
+    </div></div>`;
+  document.getElementById('attDate').addEventListener('change',e=>{
+    attDate=e.target.value; attExtraQuery='';
+    document.getElementById('attDowLabel').textContent=dowLabel(attDate)+' 정규반 명단 · 스케줄표 동기화하면 자동 반영';
+    document.getElementById('attExtraSearch').value='';
+    drawDayTable(); drawExtraResults();
+  });
+  document.getElementById('attExtraSearch').addEventListener('input',e=>{attExtraQuery=e.target.value;drawExtraResults();});
   drawDayTable();
+  drawExtraResults();
+}
+function regularsForToday(){
+  const dow=dowCodeOf(attDate);
+  const checkedIds=new Set(DB.attendance.filter(a=>a.date===attDate).map(a=>a.memberId));
+  return sortMembersKo(DB.members).filter(m=>(m.days||[]).includes(dow) || checkedIds.has(m.id));
 }
 function drawDayTable(){
   const el=document.getElementById('attTable');
   if(!DB.members.length){el.innerHTML=`<div class="empty"><div class="big">🧑‍🤝‍🧑</div>먼저 회원을 등록하세요.</div>`;return}
   const day=DB.attendance.filter(a=>a.date===attDate);
   const c={present:0,absent:0,makeup:0}; day.forEach(a=>c[a.status||'present']=(c[a.status||'present']||0)+1);
-  const btn=(mid,st,label)=>{const cur=attOn(mid);const on=cur&&(cur.status||'present')===st;
-    return `<button class="btn ${on?'btn-primary':'btn-ghost'} btn-sm" onclick="setAtt('${mid}','${st}')">${on?'✓ ':''}${label}</button>`;};
+  const regulars=regularsForToday();
   el.innerHTML=`
     <div style="display:flex;gap:14px;padding:0 22px 14px;font-size:12.5px" class="muted">
       <span>출석 <b style="color:var(--ink)">${c.present}</b></span>
@@ -3048,12 +3077,25 @@ function drawDayTable(){
       <span>보강 <b style="color:var(--ink)">${c.makeup}</b></span>
     </div>
     <table><thead><tr><th>회원</th><th>이번 달</th><th style="text-align:right">출석 상태</th></tr></thead><tbody>${
-    sortMembersKo(DB.members).map(m=>{const used=monthlyUsed(m.id,attDate.slice(0,7));const q=quotaOf(m);return `<tr>
+    regulars.length ? regulars.map(m=>{const used=monthlyUsed(m.id,attDate.slice(0,7));const q=quotaOf(m);return `<tr>
         <td><div class="name-cell clickable" onclick="openDetail('${m.id}')"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}</div></td>
         <td class="muted">${used}/${q||'-'}</td>
-        <td style="text-align:right"><div class="att-btns">${btn(m.id,'present','출석')}${btn(m.id,'absent','결석')}${btn(m.id,'makeup','보강')}</div></td>
-      </tr>`}).join('')
+        <td style="text-align:right">${attButtons(m.id)}</td>
+      </tr>`}).join('') : `<tr><td colspan="3" class="muted" style="padding:18px 22px">오늘(${dowLabel(attDate)}) 정규반 회원이 없어요. 아래 검색창에서 보강 등으로 추가하세요.</td></tr>`
   }</tbody></table>`;
+}
+function drawExtraResults(){
+  const el=document.getElementById('attExtraResults'); if(!el) return;
+  const regularIds=new Set(regularsForToday().map(m=>m.id));
+  const q=attExtraQuery.trim().toLowerCase();
+  const matches=q ? sortMembersKo(DB.members).filter(m=>!regularIds.has(m.id) && (m.name||'').toLowerCase().includes(q)).slice(0,8) : [];
+  el.innerHTML = matches.length ? matches.map(m=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)">
+        <div class="name-cell clickable" onclick="openDetail('${m.id}')"><div class="avatar" style="background:${avatarColor(m.name)}">${initials(m.name)}</div>${m.name}<span class="muted" style="font-size:11px;margin-left:6px">${(m.days||[]).map(d=>DOW_KO[d]).join('·')||'요일 미확인'}</span></div>
+        ${attButtons(m.id)}
+      </div>`).join('')
+    : (q?`<div class="muted" style="font-size:12.5px;padding:6px 0">검색 결과 없음</div>`
+        :`<div class="muted" style="font-size:12.5px;padding:6px 0">오늘 명단에 없는 아이(보강 등)를 체크할 땐 여기서 이름을 검색하세요.</div>`);
 }
 function setAtt(mid,st){
   const i=DB.attendance.findIndex(a=>a.memberId===mid&&a.date===attDate);
@@ -3064,6 +3106,7 @@ function setAtt(mid,st){
     DB.attendance.push({id:id(),memberId:mid,date:attDate,status:st,src:'app'});
   }
   save();drawDayTable();
+  if(document.getElementById('attExtraResults')) drawExtraResults();
 }
 
 /* ---- 전체보기: 한 달치 출결을 학생×날짜 표로 한눈에 ---- */

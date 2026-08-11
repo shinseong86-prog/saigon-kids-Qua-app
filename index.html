@@ -576,7 +576,8 @@ function applySync(resp){
     const p=prev[m.id]||{};
     const merged=Object.assign({phone:'',birth:'',kid:true,join:''}, p, {
       id:m.id, name:m.name, gender:m.gender, makeup:m.makeup, tierId:m.tierId, first:m.first, age:m.age, kid:(m.kid!==undefined?m.kid:(p.kid!==undefined?p.kid:true)),
-      days:Array.isArray(m.days)?m.days:[]   // 스케줄표 요일 배열 ('mon'..'sun') · 매 동기화마다 최신으로 교체
+      days:Array.isArray(m.days)?m.days:[],   // 스케줄표 요일 배열 ('mon'..'sun') · 매 동기화마다 최신으로 교체
+      quota:(typeof m.quota==='number')?m.quota:0   // ★ 이번 달 실제 최대 수업 가능 횟수 · 매 동기화마다 최신으로 교체
     });
     // 학교·학년 등 직접 입력값 유지
     merged.school=p.school||m.school||'';

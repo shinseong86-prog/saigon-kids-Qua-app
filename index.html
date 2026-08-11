@@ -2540,9 +2540,58 @@ function load(){
   return seed();
 }
 function save(){
+  DB.updatedAt = new Date().toISOString();
   localStorage.setItem(KEY, JSON.stringify(DB));
   const el=document.getElementById('lastSaved');
   if(el) el.textContent='마지막 저장: '+new Date().toLocaleTimeString('ko-KR');
+  pushStateDebounced();
+}
+
+/* ================= 기기간 동기화 (AppState) =================
+   구글시트에 새로 추가되는 'AppState' 탭에 앱 DB 전체를 JSON 하나로 저장/조회.
+   - save() 호출될 때마다(=거의 모든 편집 시점) 몇 초 뒤 자동으로 서버에 업로드(push)
+   - 앱을 열 때 서버에서 먼저 최신본을 받아와(pull), 로컬보다 최신이면 교체
+   - 최신 판단은 DB.updatedAt(ISO 문자열) 비교로 함 (마지막에 저장한 기기가 이김) */
+let _pushTimer=null;
+function pushStateDebounced(){
+  const url=localStorage.getItem(SYNC_URL_KEY);
+  if(!url) return;
+  clearTimeout(_pushTimer);
+  _pushTimer=setTimeout(function(){ pushState(url); }, 3000);
+}
+function pushState(url){
+  try{
+    fetch(url, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({db:DB})
+    });
+  }catch(e){ /* 실패해도 다음 저장 때 다시 시도되므로 조용히 무시 */ }
+}
+function pullState(cb){
+  const url=localStorage.getItem(SYNC_URL_KEY);
+  if(!url){ if(cb) cb(); return; }
+  const jcb='__state_cb_'+Date.now();
+  const sc=document.createElement('script');
+  const timer=setTimeout(function(){ cleanup(); if(cb) cb(); }, 15000);
+  function cleanup(){ try{delete window[jcb];}catch(e){window[jcb]=undefined;} if(sc.parentNode) sc.parentNode.removeChild(sc); clearTimeout(timer); }
+  window[jcb]=function(resp){
+    cleanup();
+    if(resp && resp.ok && resp.db){
+      const remoteAt=new Date(resp.db.updatedAt||0).getTime();
+      const localAt=new Date(DB.updatedAt||0).getTime();
+      if(remoteAt>localAt){
+        DB=resp.db;
+        localStorage.setItem(KEY, JSON.stringify(DB));
+        render();
+      }
+    }
+    if(cb) cb();
+  };
+  sc.onerror=function(){ cleanup(); if(cb) cb(); };
+  const sep=url.indexOf('?')>-1?'&':'?';
+  sc.src=url+sep+'mode=state&callback='+jcb+'&t='+Date.now();
+  document.body.appendChild(sc);
 }
 
 /* ================= Helpers ================= */
@@ -3586,8 +3635,10 @@ document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{
 /* ================= Init ================= */
 save();
 render();
-// 앱 열 때 자동 동기화 (URL이 저장돼 있으면 조용히)
-if(localStorage.getItem(SYNC_URL_KEY)) setTimeout(function(){syncNow(true);}, 400);
+// 앱 열 때: 다른 기기의 최신 데이터를 먼저 받아온(pull) 뒤, 스케줄표 동기화(syncNow) 실행
+if(localStorage.getItem(SYNC_URL_KEY)){
+  pullState(function(){ setTimeout(function(){syncNow(true);}, 200); });
+}
 </script>
 </body>
 </html>

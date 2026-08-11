@@ -533,7 +533,7 @@ function syncNow(silent){
   const st=document.getElementById('syncStatus'); if(st) st.textContent='동기화 중…';
   const cb='__sync_cb_'+Date.now();
   const sc=document.createElement('script');
-  const timer=setTimeout(function(){ cleanup(); if(!silent) toast('동기화 시간초과 — URL/배포 권한 확인'); }, 20000);
+  const timer=setTimeout(function(){ cleanup(); if(!silent) toast('동기화 시간초과 — URL/배포 권한 확인'); }, 45000);   // ★ 이번 달 전체 주차 스캔으로 응답이 10~15초대까지 걸릴 수 있어 여유 있게 연장
   function cleanup(){ try{delete window[cb];}catch(e){window[cb]=undefined;} if(sc.parentNode) sc.parentNode.removeChild(sc); clearTimeout(timer); }
   window[cb]=function(resp){ cleanup(); applySync(resp); };
   sc.onerror=function(){ cleanup(); if(!silent) toast('동기화 실패 — URL을 확인하세요'); updateSyncStatus(); };

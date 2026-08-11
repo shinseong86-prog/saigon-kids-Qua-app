@@ -2619,12 +2619,13 @@ function sessionsUsed(memberId){
 }
 function passStatus(m){
   const t=tierOf(m.tierId);
-  if(!t || !t.sessions) return {label:'활성',cls:'tag-active',used:sessionsUsed(m.id),total:null};
+  const total=quotaOf(m);
+  if(!t || !total) return {label:'활성',cls:'tag-active',used:sessionsUsed(m.id),total:null};
   const used=sessionsUsed(m.id);
-  const left=t.sessions-used;
-  if(left<=0) return {label:'소진',cls:'tag-expired',used,total:t.sessions};
-  if(left<=2) return {label:'잔여 '+left+'회',cls:'tag-low',used,total:t.sessions};
-  return {label:'잔여 '+left+'회',cls:'tag-active',used,total:t.sessions};
+  const left=total-used;
+  if(left<=0) return {label:'소진',cls:'tag-expired',used,total};
+  if(left<=2) return {label:'잔여 '+left+'회',cls:'tag-low',used,total};
+  return {label:'잔여 '+left+'회',cls:'tag-active',used,total};
 }
 
 function daysUntilBirthday(birth){
@@ -2962,7 +2963,7 @@ function sortMembersKo(list){
 }
 
 const monthLabel = ym => { const [y,m]=ym.split('-'); return y+'년 '+(+m)+'월'; };
-function quotaOf(m){ const t=tierOf(m.tierId); if(t&&t.sessions) return t.sessions; if(t&&t.perWeek) return t.perWeek*4; return 0; }
+function quotaOf(m){ if(m && m.quota) return m.quota; const t=tierOf(m.tierId); if(t&&t.sessions) return t.sessions; if(t&&t.perWeek) return t.perWeek*4; return 0; }
 function shiftMonth(delta){
   let [y,m]=attMonth.split('-').map(Number); m+=delta;
   if(m<1){m=12;y--;} if(m>12){m=1;y++;}
